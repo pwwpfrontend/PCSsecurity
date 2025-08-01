@@ -1,14 +1,18 @@
-import React from "react";
-
 const Header = () => {
   return (
-    <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 border-b border-gray-200">
-      <div className="flex items-center gap-2">
-        <h1 className="text-xl font-semibold text-blue-600">PCS Security</h1>
-      </div>
-      
+    <header className="flex justify-between items-center p-4 border-b border-gray-200 shadow">
+      {/* Left side: Logo */}
+      <img
+        src="/logo192.png"
+        alt="PCS Security Logo"
+        className="h-10 w-auto" // Slightly increased for better visual presence
+      />
+
+      {/* Right side: (Optional - if you need something later) */}
+      {/* You can add a nav menu, profile icon, etc., here if needed */}
     </header>
   );
 };
 
 export default Header;
+
