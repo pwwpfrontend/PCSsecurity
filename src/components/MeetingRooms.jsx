@@ -3,88 +3,86 @@ import { Monitor } from "lucide-react";
 
 const ROOM_MEETINGS_API_URL = "https://njs-01.optimuslab.space/webhook/pcs/room_meetings";
 
-// Define all meeting rooms (static list)
+// Define all meeting rooms
 const ALL_MEETING_ROOMS = [
-  "Edison", "Nobel", "Einstein", "Morse", 
+  "Edison", "Nobel", "Einstein", "Morse",
   "Bell", "Hopper", "Kilburn", "Curie"
 ];
-
 const MeetingRooms = () => {
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Function to fetch meeting room data from API
   const fetchMeetingRoomData = async () => {
     try {
       setLoading(true);
-      const response = await fetch(ROOM_MEETINGS_API_URL);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const occupiedRoomsData = await response.json();
-      
-      // DEBUG: Log the API response to see the structure
-      console.log("API Response:", occupiedRoomsData);
-      
-      // Get current timestamp
-      const currentTime = Date.now();
-      console.log("Current timestamp:", currentTime);
-      
-      // Extract room names from API response (only rooms that are currently occupied)
-      let occupiedRoomNames = [];
-      
-      if (Array.isArray(occupiedRoomsData)) {
-        occupiedRoomNames = occupiedRoomsData
-          .filter(meeting => {
-            const startTime = parseInt(meeting.startTime);
-            const endTime = parseInt(meeting.endTime);
-            const isCurrentlyActive = currentTime >= startTime && currentTime <= endTime;
-            
-            console.log(`Meeting in ${meeting.area}:`, {
-              startTime: new Date(startTime).toLocaleString(),
-              endTime: new Date(endTime).toLocaleString(),
-              currentTime: new Date(currentTime).toLocaleString(),
-              isActive: isCurrentlyActive
-            });
-            
-            return isCurrentlyActive;
-          })
-          .map(meeting => meeting.area)
-          .filter(Boolean);
-      }
-      
-      console.log("Currently occupied room names:", occupiedRoomNames);
 
-      // Create room status array - mark rooms as unavailable if they appear in API
-      const roomStatuses = ALL_MEETING_ROOMS.map(roomName => ({
-        name: roomName,
-        available: !occupiedRoomNames.includes(roomName)
+      // Use real API
+      const response = await fetch(ROOM_MEETINGS_API_URL);
+      const occupiedRoomsData = await response.json();
+      console.log("API Response:", occupiedRoomsData);
+
+      // Current UTC timestamp
+      const nowUTC = Date.now();
+
+      // ✅ Adjust current time to match API’s UTC-based timestamps
+      const localOffset = new Date().getTimezoneOffset() * 60 * 1000;
+      const adjustedNow = nowUTC - localOffset;
+
+      console.log("Now (UTC):", new Date(nowUTC).toString());
+      console.log("Adjusted Now:", new Date(adjustedNow).toString());
+
+      // Filter currently active meetings
+      const occupiedRoomNames = occupiedRoomsData
+        .filter(meeting => {
+  const start = Number(meeting.startTime);
+  const end = Number(meeting.endTime);
+  const now = Date.now(); // ✅ using raw current time
+
+  const isActive = now >= start && now <= end;
+
+  console.log(`Checking room: ${meeting.area}`, {
+    startRaw: meeting.startTime,
+    endRaw: meeting.endTime,
+    nowRaw: now,
+    startUTC: new Date(start).toISOString(),
+    endUTC: new Date(end).toISOString(),
+    nowUTC: new Date(now).toISOString(),
+    isActive
+  });
+
+  return isActive;
+})
+
+
+        .map(meeting => meeting.area);
+
+      console.log("Currently occupied rooms:", occupiedRoomNames);
+
+      // Build room statuses
+      const roomStatuses = ALL_MEETING_ROOMS.map(name => ({
+        name,
+        available: !occupiedRoomNames.includes(name)
       }));
 
       console.log("Final room statuses:", roomStatuses);
+
       setRooms(roomStatuses);
       setError(null);
-    } catch (error) {
-      console.error("Error fetching meeting room data:", error);
+    } catch (err) {
+      console.error("Error fetching meeting room data:", err);
       setError("Failed to load meeting room data");
-      
-      // Fallback: show all rooms as available if API fails
-      const fallbackRooms = ALL_MEETING_ROOMS.map(roomName => ({
-        name: roomName,
-        available: true
-      }));
-      setRooms(fallbackRooms);
+
+      // Fallback: all rooms available
+      setRooms(ALL_MEETING_ROOMS.map(name => ({ name, available: true })));
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchMeetingRoomData(); // initial fetch
-    const interval = setInterval(fetchMeetingRoomData, 10000); // refresh every 10s
+    fetchMeetingRoomData();
+    const interval = setInterval(fetchMeetingRoomData, 10000);
     return () => clearInterval(interval);
   }, []);
 
@@ -108,7 +106,7 @@ const MeetingRooms = () => {
         </div>
         <div className="text-sm text-right">
           <p className="text-gray-600">
-            Available: <span className="font-medium">{rooms.filter(room => room.available).length}/{rooms.length}</span>
+            Available: <span className="font-medium">{rooms.filter(r => r.available).length}/{rooms.length}</span>
           </p>
           <p className="text-green-600 font-medium">Status: Live</p>
           {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
@@ -117,7 +115,7 @@ const MeetingRooms = () => {
 
       {/* Room Boxes */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
-        {rooms.slice(0, 8).map((room, index) => (
+        {rooms.map(room => (
           <div
             key={room.name}
             className={`h-[104px] w-full rounded-md text-md font-medium shadow-md flex items-center justify-center text-white transition-colors duration-300
