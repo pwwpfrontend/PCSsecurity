@@ -33,6 +33,23 @@ const transformToOccupancyLoad = (apiData) => {
   }));
 };
 
+// Create empty data structure for display while loading
+const createEmptyData = () => {
+  const currentHour = new Date().getHours();
+  const emptyData = [];
+  
+  // Create 24 empty data points
+  for (let i = 23; i >= 0; i--) {
+    const hour = (currentHour - i + 24) % 24;
+    emptyData.push({
+      time: formatHourToDisplay(hour),
+      load: 0
+    });
+  }
+  
+  return emptyData;
+};
+
 const OccupancyLoadChart = () => {
   const [occupancyLoadData, setOccupancyLoadData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -55,7 +72,7 @@ const OccupancyLoadChart = () => {
       setError(null);
     } catch (error) {
       console.error("Error fetching occupancy history data:", error);
-      setError("Failed to load occupancy history data");
+      setError("failed to load occupancy history data");
       // Keep existing data if fetch fails, don't override with dummy data
       setOccupancyLoadData(prev => prev);
     } finally {
@@ -81,15 +98,10 @@ const OccupancyLoadChart = () => {
     return occupancyLoadData[occupancyLoadData.length - 1].load;
   };
 
-  if (loading) {
-    return (
-      <div className="bg-white p-4 rounded-lg shadow w-full border border-gray-300">
-        <div className="flex justify-center items-center h-48">
-          <div className="text-gray-500">Loading occupancy history...</div>
-        </div>
-      </div>
-    );
-  }
+  // Get data to display - real data if available, empty structure if loading
+  const getDisplayData = () => {
+    return occupancyLoadData.length > 0 ? occupancyLoadData : createEmptyData();
+  };
 
   return (
     <div className="bg-white p-4 rounded-lg shadow w-full border border-gray-300">
@@ -107,7 +119,9 @@ const OccupancyLoadChart = () => {
         </div>
         <p className="text-sm text-right text-gray-600">
           Max Load: <span className="font-medium">50</span> <br />
-          Status: <span className="text-green-600 font-medium">Live</span> <br />
+          Status: <span className={loading && occupancyLoadData.length === 0 ? "text-orange-500 font-medium" : "text-green-600 font-medium"}>
+            {loading && occupancyLoadData.length === 0 ? "Loading..." : "Live"}
+          </span> <br />
           
           {error && (
             <>
@@ -120,7 +134,7 @@ const OccupancyLoadChart = () => {
 
       <ResponsiveContainer width="100%" height={180}>
         <BarChart
-          data={occupancyLoadData}
+          data={getDisplayData()}
           barCategoryGap="15%"
           margin={{ top: 10, right: 20, left: 0, bottom: 0 }}
         >
@@ -130,7 +144,7 @@ const OccupancyLoadChart = () => {
             tick={{ fontSize: 12 }}
             axisLine={false}
             tickLine={false}
-            interval={0}
+            interval={loading && occupancyLoadData.length === 0 ? 3 : 0}
           />
           <YAxis
             domain={[0, 'dataMax + 10']} 
@@ -141,8 +155,8 @@ const OccupancyLoadChart = () => {
           <Tooltip />
           <Bar
             dataKey="load"
-            fill="rgba(239, 209, 236, 0.8)"      // New fill color
-            stroke="#ba9eb7"                     // New stroke color
+            fill={loading && occupancyLoadData.length === 0 ? "rgba(229, 231, 235, 0.5)" : "rgba(239, 209, 236, 0.8)"}
+            stroke={loading && occupancyLoadData.length === 0 ? "#d1d5db" : "#ba9eb7"}
             strokeWidth={1.5}
             radius={[0, 0, 0, 0]}
             barSize={32}
@@ -150,6 +164,15 @@ const OccupancyLoadChart = () => {
           />
         </BarChart>
       </ResponsiveContainer>
+
+      {/* Loading indicator overlay */}
+      {loading && occupancyLoadData.length === 0 && (
+        <div className="flex justify-center -mt-20 mb-16">
+          <div className="bg-white bg-opacity-90 p-2 rounded shadow text-sm text-gray-600">
+            Fetching data...
+          </div>
+        </div>
+      )}
 
       {/* Legend */}
       <div className="flex justify-end mt-2 text-xs text-gray-700">

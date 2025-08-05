@@ -9,7 +9,7 @@ import {
   CartesianGrid,
   Cell,
 } from "recharts";
-import { UsersIcon } from "lucide-react";
+import { Users } from "lucide-react";
 
 // Updated Zone color mapping
 const zoneColors = {
@@ -26,9 +26,12 @@ const OccupancyChart = () => {
   const [error, setError] = useState(null);
 
   // Function to fetch occupancy data from API
-  const fetchOccupancyData = async () => {
+  const fetchOccupancyData = async (isInitialLoad = false) => {
     try {
-      setLoading(true);
+      if (isInitialLoad) {
+        setLoading(true);
+      }
+      
       const response = await fetch(OCCUPANCY_API_URL);
       
       if (!response.ok) {
@@ -50,20 +53,25 @@ const OccupancyChart = () => {
     } catch (error) {
       console.error("Error fetching occupancy data:", error);
       setError("Failed to load occupancy data");
-      // Fallback to dummy data in case of error
-      setZoneOccupancy([
-        { zone: "Zone A", value: 0 },
-        { zone: "Zone B", value: 0 },
-        { zone: "Zone C", value: 0 },
-      ]);
+      
+      // Only set fallback data if this is the initial load and we have no data
+      if (isInitialLoad && zoneOccupancy.length === 0) {
+        setZoneOccupancy([
+          { zone: "Zone A", value: 0 },
+          { zone: "Zone B", value: 0 },
+          { zone: "Zone C", value: 0 },
+        ]);
+      }
     } finally {
-      setLoading(false);
+      if (isInitialLoad) {
+        setLoading(false);
+      }
     }
   };
 
   useEffect(() => {
-    fetchOccupancyData(); // initial fetch
-    const interval = setInterval(fetchOccupancyData, 30000); // refresh every 30s
+    fetchOccupancyData(true); // initial fetch with loading state
+    const interval = setInterval(() => fetchOccupancyData(false), 30000); // silent updates every 30s
     return () => clearInterval(interval);
   }, []);
 
@@ -84,7 +92,7 @@ const OccupancyChart = () => {
       {/* Title */}
       <div className="flex justify-between items-center mb-2">
         <div className="flex items-center space-x-1">
-          <UsersIcon size={20} className="text-gray-700" />
+          <Users size={20} className="text-gray-700" />
           <h2 className="text-lg font-semibold">Occupancy</h2>
         </div>
         <p className="text-sm text-right text-gray-600">

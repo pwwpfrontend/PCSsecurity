@@ -6,17 +6,19 @@ const ROOM_MEETINGS_API_URL = "https://api.powerworkplace.com/api:lToIpusH/humly
 // Define all meeting rooms
 const ALL_MEETING_ROOMS = [
   "Edison", "Nobel", "Einstein", "Morse",
-  "Bell", "Hopper", "Kilburn", "Curie"
+  "Bell", "Hopper", "Kilburn"
 ];
 
 const MeetingRooms = () => {
-  const [rooms, setRooms] = useState([]);
+  const [rooms, setRooms] = useState(ALL_MEETING_ROOMS.map(name => ({ name, available: true })));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const fetchMeetingRoomData = async () => {
+  const fetchMeetingRoomData = async (showLoading = true) => {
     try {
-      setLoading(true);
+      if (showLoading) {
+        setLoading(true);
+      }
       console.log("Fetching data from:", ROOM_MEETINGS_API_URL);
 
       const response = await fetch(ROOM_MEETINGS_API_URL);
@@ -27,21 +29,34 @@ const MeetingRooms = () => {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const occupiedRoomsData = await response.json();
-      console.log("API Response:", occupiedRoomsData);
+      const apiResponse = await response.json();
+      console.log("API Response:", apiResponse);
 
-      // Check if the response is an array
-      if (!Array.isArray(occupiedRoomsData)) {
-        console.error("API response is not an array:", occupiedRoomsData);
-        throw new Error("Invalid API response format");
+      // Extract liveMeetings array from the response
+      let liveMeetings = [];
+      
+      if (Array.isArray(apiResponse)) {
+        // If response is array, find the first item with liveMeetings
+        const dataItem = apiResponse.find(item => item.liveMeetings && Array.isArray(item.liveMeetings));
+        if (dataItem) {
+          liveMeetings = dataItem.liveMeetings;
+        }
+      } else if (apiResponse.liveMeetings && Array.isArray(apiResponse.liveMeetings)) {
+        // If response is object with liveMeetings property
+        liveMeetings = apiResponse.liveMeetings;
+      } else {
+        console.error("API response doesn't contain liveMeetings array:", apiResponse);
+        throw new Error("Invalid API response format - missing liveMeetings");
       }
+
+      console.log("Extracted liveMeetings:", liveMeetings);
 
       // Current timestamp
       const now = Date.now();
       console.log("Current timestamp:", now, "->", new Date(now).toISOString());
 
       // Filter currently active meetings
-      const occupiedRoomNames = occupiedRoomsData
+      const occupiedRoomNames = liveMeetings
         .filter(meeting => {
           // Check if meeting object has required properties
           if (!meeting.startTimeTimestamp || !meeting.endTimeTimestamp || !meeting.area) {
@@ -95,17 +110,22 @@ const MeetingRooms = () => {
         setRooms(ALL_MEETING_ROOMS.map(name => ({ name, available: true })));
       }
     } finally {
-      setLoading(false);
+      if (showLoading) {
+        setLoading(false);
+      }
     }
   };
 
   useEffect(() => {
-    fetchMeetingRoomData();
-    const interval = setInterval(fetchMeetingRoomData, 10000);
+    fetchMeetingRoomData(); // Initial fetch with loading
+    const interval = setInterval(() => {
+      fetchMeetingRoomData(false); // Silent updates without loading
+    }, 10000);
     return () => clearInterval(interval);
   }, []);
 
-  if (loading) {
+  // Only show loading on initial load
+  if (loading && rooms.every(room => room.available)) {
     return (
       <div className="bg-white p-5 rounded-xl shadow w-full border border-gray-300">
         <div className="flex justify-center items-center h-48">
