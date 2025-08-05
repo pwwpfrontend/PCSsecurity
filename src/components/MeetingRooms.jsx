@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from "react";
 import { Monitor } from "lucide-react";
 
-const ROOM_MEETINGS_API_URL = "https://njs-01.optimuslab.space/webhook/pcs/room_meetings";
+const ROOM_MEETINGS_API_URL = "https://api.powerworkplace.com/api:lToIpusH/humlylivemeetings?customerId=pcs";
 
 // Define all meeting rooms
 const ALL_MEETING_ROOMS = [
   "Edison", "Nobel", "Einstein", "Morse",
   "Bell", "Hopper", "Kilburn", "Curie"
 ];
+
 const MeetingRooms = () => {
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -16,45 +17,60 @@ const MeetingRooms = () => {
   const fetchMeetingRoomData = async () => {
     try {
       setLoading(true);
+      console.log("Fetching data from:", ROOM_MEETINGS_API_URL);
 
-      // Use real API
       const response = await fetch(ROOM_MEETINGS_API_URL);
+      console.log("Response status:", response.status);
+      console.log("Response ok:", response.ok);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
       const occupiedRoomsData = await response.json();
       console.log("API Response:", occupiedRoomsData);
 
-      // Current UTC timestamp
-      const nowUTC = Date.now();
+      // Check if the response is an array
+      if (!Array.isArray(occupiedRoomsData)) {
+        console.error("API response is not an array:", occupiedRoomsData);
+        throw new Error("Invalid API response format");
+      }
 
-      // ✅ Adjust current time to match API’s UTC-based timestamps
-      const localOffset = new Date().getTimezoneOffset() * 60 * 1000;
-      const adjustedNow = nowUTC - localOffset;
-
-      console.log("Now (UTC):", new Date(nowUTC).toString());
-      console.log("Adjusted Now:", new Date(adjustedNow).toString());
+      // Current timestamp
+      const now = Date.now();
+      console.log("Current timestamp:", now, "->", new Date(now).toISOString());
 
       // Filter currently active meetings
       const occupiedRoomNames = occupiedRoomsData
         .filter(meeting => {
-  const start = Number(meeting.startTime);
-  const end = Number(meeting.endTime);
-  const now = Date.now(); // ✅ using raw current time
+          // Check if meeting object has required properties
+          if (!meeting.startTimeTimestamp || !meeting.endTimeTimestamp || !meeting.area) {
+            console.warn("Meeting object missing required properties:", meeting);
+            return false;
+          }
 
-  const isActive = now >= start && now <= end;
+          const start = Number(meeting.startTimeTimestamp);
+          const end = Number(meeting.endTimeTimestamp);
 
-  console.log(`Checking room: ${meeting.area}`, {
-    startRaw: meeting.startTime,
-    endRaw: meeting.endTime,
-    nowRaw: now,
-    startUTC: new Date(start).toISOString(),
-    endUTC: new Date(end).toISOString(),
-    nowUTC: new Date(now).toISOString(),
-    isActive
-  });
+          // Check if timestamps are valid numbers
+          if (isNaN(start) || isNaN(end)) {
+            console.warn("Invalid timestamps:", meeting);
+            return false;
+          }
 
-  return isActive;
-})
+          const isActive = now >= start && now <= end;
 
+          console.log(`Checking room: ${meeting.area}`, {
+            startTimeTimestamp: meeting.startTimeTimestamp,
+            endTimeTimestamp: meeting.endTimeTimestamp,
+            startUTC: new Date(start).toISOString(),
+            endUTC: new Date(end).toISOString(),
+            nowUTC: new Date(now).toISOString(),
+            isActive
+          });
 
+          return isActive;
+        })
         .map(meeting => meeting.area);
 
       console.log("Currently occupied rooms:", occupiedRoomNames);
@@ -71,10 +87,13 @@ const MeetingRooms = () => {
       setError(null);
     } catch (err) {
       console.error("Error fetching meeting room data:", err);
-      setError("Failed to load meeting room data");
+      setError(`Failed to load meeting room data: ${err.message}`);
 
-      // Fallback: all rooms available
-      setRooms(ALL_MEETING_ROOMS.map(name => ({ name, available: true })));
+      // Keep existing data if any, don't override with fallback
+      if (rooms.length === 0) {
+        // Only set fallback if no existing data
+        setRooms(ALL_MEETING_ROOMS.map(name => ({ name, available: true })));
+      }
     } finally {
       setLoading(false);
     }

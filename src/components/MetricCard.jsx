@@ -5,8 +5,8 @@ const getStatusAndColor = (title, value) => {
   value = parseFloat(value);
 
 if (title === "Air Quality") {
-  if (value > 1000) return { status: "Bad", color: "#e47a7c" };         // Red
-  if (value > 800) return { status: "Normal", color: "#ff9800" };       // Orange
+  if (value <= 40) return { status: "Bad", color: "#e47a7c" };         // Red
+  if (value <= 60) return { status: "Normal", color: "#ff9800" };       // Orange
   return { status: "Good", color: "#4caf50" };                          // Green
 }
 
@@ -44,7 +44,7 @@ const MetricCard = ({ title, value, unit }) => {
   const { status, color } = getStatusAndColor(title, numericValue);
 
   let percentage = 0;
-  if (title === "Air Quality") percentage = Math.min(100, (numericValue / 1000) * 100);
+  if (title === "Air Quality") percentage = Math.min(100, (numericValue / 100) * 100);
   else if (title === "Temperature") percentage = Math.min(100, (numericValue / 40) * 100);
   else if (title === "Humidity") percentage = Math.min(100, (numericValue / 100) * 100);
 

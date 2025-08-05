@@ -22,7 +22,7 @@ const Dashboard = () => {
       if (data && data.length > 0) {
         const d = data[0];
         setMetrics([
-          { title: "Air Quality", value: d.co2, unit: "ppm" },
+          { title: "Air Quality", value: d.score, unit: "%" },
           { title: "Temperature", value: d.temperature, unit: "°C" },
           { title: "Humidity", value: d.humidity, unit: "%" },
         ]);
