@@ -1,7 +1,6 @@
 // File: src/pages/Dashboard.jsx  
 import React, { useEffect, useState } from "react";
 import {
-  Header,
   MetricCard,
   OccupancyChart,
   OccupancyLoadChart,
@@ -39,8 +38,7 @@ const Dashboard = () => {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Header />
+    <div className="bg-gray-50">
       <div className="flex items-center justify-between px-6 pt-6 mb-4">
         <h1 className="text-xl font-semibold">Dashboard</h1>
         <p className="text-xl font-semibold">

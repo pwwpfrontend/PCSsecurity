@@ -3,3 +3,7 @@ export { default as MetricCard } from "./MetricCard";
 export { default as OccupancyChart } from "./OccupancyChart";
 export { default as OccupancyLoadChart } from "./OccupancyLoadChart";
 export { default as MeetingRooms } from "./MeetingRooms";
+export { default as Sidebar } from "./Sidebar";
+export { default as HistoricalData } from "./HistoricalData";
+export { default as DeviceManagement } from "./DeviceManagement";
+export { default as Login } from "./Login";
