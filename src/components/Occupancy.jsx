@@ -28,7 +28,7 @@ const HistoricalOccupancy = () => {
   const totalPages = Math.ceil(tableData.length / rowsPerPage);
 
   // API base URLs
-  const API_BASE_URL = "https://api.powerworkplace.com/api:P-MhDvE_";
+  const API_BASE_URL = "http://optimus-india-njs-01.netbird.cloud:3005/pcs/optimus";
 
   // Enhanced logging function
   const logApiResponse = (endpoint, data) => {
@@ -81,38 +81,29 @@ const HistoricalOccupancy = () => {
     return `${day}/${month}`;
   };
 
-  // Helper function to fetch data for all zones when "All Areas" is selected
+  // Helper function to fetch data for the given range (new API returns all areas)
   const fetchAllZonesData = async (startTimestamp, endTimestamp, apiType) => {
-    const zones = ["Zone A", "Zone B", "Zone C", "Office"];
-    const allZoneData = [];
-    
-    for (const zone of zones) {
-      try {
-        let url;
-        if (apiType === "daily") {
-          url = `${API_BASE_URL}/pointgrab_historical_based_on_hour?from=${startTimestamp}&to=${endTimestamp}&zone=${encodeURIComponent(zone)}`;
-        } else {
-          url = `${API_BASE_URL}/pointgrab?from=${startTimestamp}&to=${endTimestamp}&zone=${encodeURIComponent(zone)}`;
-        }
-        
-        const response = await fetch(url);
-        if (response.ok) {
-          const data = await response.json();
-          const dataArray = Array.isArray(data) ? data : [data];
-          dataArray.forEach(item => {
-            allZoneData.push({
-              ...item,
-              zone: zone,
-              originalZone: zone
-            });
-          });
-        }
-      } catch (error) {
-        console.error(`Error fetching data for ${zone}:`, error);
-      }
+    try {
+      const startStr = typeof startTimestamp === 'string'
+        ? startTimestamp
+        : new Date(startTimestamp).toISOString().split('T')[0];
+      const endStr = typeof endTimestamp === 'string'
+        ? endTimestamp
+        : new Date(endTimestamp).toISOString().split('T')[0];
+      const url = apiType === 'daily'
+        ? `${API_BASE_URL}/occupancy_hourly_summary?start=${startStr}&end=${endStr}`
+        : `${API_BASE_URL}/occupancy_daily_summary?start=${startStr}&end=${endStr}`;
+      
+      console.log('Fetching from URL:', url);
+      const response = await fetch(url);
+      if (!response.ok) return [];
+      const data = await response.json();
+      console.log('Raw API response:', data);
+      return Array.isArray(data) ? data : [];
+    } catch (error) {
+      console.error('Error fetching data:', error);
+      return [];
     }
-    
-    return allZoneData;
   };
 
   // Calculate averages for Weekly/Monthly/Custom reports
@@ -122,7 +113,7 @@ const HistoricalOccupancy = () => {
     if (selectedArea === "All Areas") {
       // Group data by zone and calculate averages for each zone
       const zoneGroups = data.reduce((acc, item) => {
-        const zone = item.zone || item.originalZone || "Unknown";
+        const zone = item.area || item.zone || item.originalZone || "Unknown";
         if (!acc[zone]) acc[zone] = [];
         acc[zone].push(item);
         return acc;
@@ -130,8 +121,8 @@ const HistoricalOccupancy = () => {
       
       return Object.keys(zoneGroups).map(zone => {
         const zoneData = zoneGroups[zone];
-        const avgOccupancy = zoneData.reduce((sum, item) => sum + safeParseNumber(item.occupancy), 0) / zoneData.length;
-        const avgPercentage = zoneData.reduce((sum, item) => sum + safeParseNumber(item.occupancyPercentage), 0) / zoneData.length;
+        const avgOccupancy = zoneData.reduce((sum, item) => sum + safeParseNumber(item.occupancy_count_avg ?? item.occupancy), 0) / zoneData.length;
+        const avgPercentage = zoneData.reduce((sum, item) => sum + safeParseNumber(item.occupancy_percentage_avg ?? item.occupancyPercentage), 0) / zoneData.length;
         
         return {
           id: zone,
@@ -146,8 +137,10 @@ const HistoricalOccupancy = () => {
       });
     } else {
       // Single zone - calculate overall average
-      const avgOccupancy = data.reduce((sum, item) => sum + safeParseNumber(item.occupancy), 0) / data.length;
-      const avgPercentage = data.reduce((sum, item) => sum + safeParseNumber(item.occupancyPercentage), 0) / data.length;
+      const filtered = data.filter(d => (d.area || d.zone) === selectedArea);
+      const source = filtered.length > 0 ? filtered : data;
+      const avgOccupancy = source.reduce((sum, item) => sum + safeParseNumber(item.occupancy_count_avg ?? item.occupancy), 0) / source.length;
+      const avgPercentage = source.reduce((sum, item) => sum + safeParseNumber(item.occupancy_percentage_avg ?? item.occupancyPercentage), 0) / source.length;
       
       return [{
         id: 0,
@@ -157,7 +150,7 @@ const HistoricalOccupancy = () => {
         reportLabel: getReportLabel(reportType),
         isAverage: true,
         date: new Date().toISOString().split('T')[0],
-        raw_data: data
+        raw_data: source
       }];
     }
   };
@@ -172,43 +165,160 @@ const HistoricalOccupancy = () => {
     }
   };
 
-  // Process API data to match our table structure
+  // FIXED: Process API data to match our table structure
   const processApiData = (data, type) => {
     console.log('Processing API data:', data, 'Type:', type);
+    console.log('Selected Area:', selectedArea);
     
-    if (!data) return [];
+    if (!data || data.length === 0) return [];
     
     // Handle both single object and array responses
     const dataArray = Array.isArray(data) ? data : [data];
+    console.log('Data array length:', dataArray.length);
     
-    let processedData = dataArray.map((item, index) => {
-      console.log('Processing item:', item);
-      
-      return {
-        id: index,
-        zone: item.zone || item.originalZone || selectedArea,
-        occupancy: Math.round(safeParseNumber(item.occupancy) * 10) / 10, // Round to 1 decimal
-        occupancyPercentage: Math.round(safeParseNumber(item.occupancyPercentage)), // Round to whole number
-        hour: item.hour !== undefined ? safeParseNumber(item.hour) : null,
-        date: item.date || convertTimestamp(item.timestamp) || new Date().toISOString(),
-        timestamp: item.timestamp || Date.now(),
-        raw_item: item
-      };
-    });
+    let processedData = [];
     
-    // Sort by hour for daily reports (ascending order)
+    // For daily reports, we need to group by area and show all hours for each area
     if (type === "daily") {
+      // First, get all unique areas from the data
+      const availableAreas = [...new Set(dataArray.map(item => item.area || item.zone || item.originalZone || "Unknown"))];
+      console.log('Available areas in data:', availableAreas);
+      
+      // Determine which areas to process
+      let areasToProcess = [];
+      if (selectedArea === "All Areas") {
+        areasToProcess = availableAreas;
+      } else {
+        // Check if the selected area exists in the data
+        areasToProcess = availableAreas.includes(selectedArea) ? [selectedArea] : availableAreas;
+      }
+      console.log('Areas to process:', areasToProcess);
+      
+      // Group data by area and hour
+      const areaHourMap = {};
+      
+      dataArray.forEach((item) => {
+        const areaName = item.area || item.zone || item.originalZone || "Unknown";
+        
+        // Convert UTC hour to HKT hour
+        let hktHour = null;
+        if (item.hour !== undefined && item.hour !== null) {
+          const utcHour = safeParseNumber(item.hour);
+          hktHour = (((utcHour + 8) % 24) + 24) % 24;
+        } else if (item.timestamp) {
+          const parsedTs = Date.parse(item.timestamp);
+          if (!Number.isNaN(parsedTs)) {
+            const msHkt = parsedTs + 8 * 60 * 60 * 1000;
+            const d = new Date(msHkt);
+            hktHour = d.getUTCHours();
+          }
+        }
+        
+        // Store data with converted hour
+        if (hktHour !== null) {
+          const key = `${areaName}-${hktHour}`;
+          areaHourMap[key] = item;
+          console.log(`Mapped data for ${key}:`, {
+            occupancy: item.occupancy_count_avg || item.occupancy,
+            percentage: item.occupancy_percentage_avg || item.occupancyPercentage
+          });
+        }
+      });
+      
+      // Generate table rows for each area and each hour (8-17)
+      areasToProcess.forEach(areaName => {
+        console.log(`\nProcessing area: ${areaName}`);
+        
+        for (let hour = 8; hour <= 17; hour++) {
+          const key = `${areaName}-${hour}`;
+          const item = areaHourMap[key];
+          
+          console.log(`  Hour ${hour}: ${item ? 'HAS DATA' : 'NO DATA'}`);
+          if (item) {
+            console.log(`    Occupancy: ${item.occupancy_count_avg || item.occupancy}`);
+            console.log(`    Percentage: ${item.occupancy_percentage_avg || item.occupancyPercentage}`);
+          }
+          
+          // Get date from the item or use selected date
+          let baseDate = dateRange.selectedDate;
+          if (item && item.day) {
+            const match = item.day.match(/^(\d{4})-(\d{2})-(\d{2})/);
+            if (match) {
+              const y = Number(match[1]);
+              const m = Number(match[2]);
+              const d = Number(match[3]);
+              const msUtc = Date.UTC(y, m - 1, d, 0, 0, 0);
+              const msHkt = msUtc + 8 * 60 * 60 * 1000;
+              baseDate = new Date(msHkt).toISOString().split('T')[0];
+            } else {
+              const parsed = Date.parse(item.day);
+              if (!Number.isNaN(parsed)) {
+                baseDate = new Date(parsed + 8 * 60 * 60 * 1000).toISOString().split('T')[0];
+              }
+            }
+          }
+
+          const occupancyValue = item ? safeParseNumber(item.occupancy_count_avg ?? item.occupancy) : 0;
+          const percentageValue = item ? safeParseNumber(item.occupancy_percentage_avg ?? item.occupancyPercentage) : 0;
+
+          processedData.push({
+            id: `${areaName}-${hour}`,
+            zone: areaName,
+            occupancy: Math.round(occupancyValue * 10) / 10,
+            occupancyPercentage: Math.round(percentageValue),
+            hour: hour,
+            date: baseDate,
+            timestamp: item?.timestamp || Date.now(),
+            raw_item: item || null
+          });
+        }
+      });
+      
+      // Sort by area name first, then by hour
       processedData = processedData.sort((a, b) => {
-        if (a.hour === null || a.hour === undefined) return 1;
-        if (b.hour === null || b.hour === undefined) return -1;
+        if (a.zone !== b.zone) {
+          return a.zone.localeCompare(b.zone);
+        }
         return a.hour - b.hour;
+      });
+      
+      console.log('Final processed data length:', processedData.length);
+      console.log('Sample processed items:', processedData.slice(0, 3));
+      
+    } else {
+      // For non-daily reports, process normally
+      processedData = dataArray.map((item, index) => {
+        const hktDate = item.day ? (() => {
+          const match = item.day.match(/^(\d{4})-(\d{2})-(\d{2})/);
+          if (match) {
+            const y = Number(match[1]);
+            const m = Number(match[2]);
+            const d = Number(match[3]);
+            const msUtc = Date.UTC(y, m - 1, d, 0, 0, 0);
+            const msHkt = msUtc + 8 * 60 * 60 * 1000;
+            return new Date(msHkt).toISOString().split('T')[0];
+          }
+          const parsed = Date.parse(item.day);
+          if (!Number.isNaN(parsed)) {
+            return new Date(parsed + 8 * 60 * 60 * 1000).toISOString().split('T')[0];
+          }
+          return item.date || convertTimestamp(item.timestamp) || new Date().toISOString();
+        })() : (item.date || convertTimestamp(item.timestamp) || new Date().toISOString());
+
+        return {
+          id: index,
+          zone: item.area || item.zone || item.originalZone || selectedArea,
+          occupancy: Math.round(safeParseNumber(item.occupancy_count_avg ?? item.occupancy) * 10) / 10,
+          occupancyPercentage: Math.round(safeParseNumber(item.occupancy_percentage_avg ?? item.occupancyPercentage)),
+          date: hktDate,
+          timestamp: item.timestamp || Date.now(),
+          raw_item: item
+        };
       });
     }
     
     return processedData;
   };
-
-
 
   // Fetch chart data for expanded rows
   const fetchChartData = async (zone) => {
@@ -219,7 +329,9 @@ const HistoricalOccupancy = () => {
       
       if (reportType.toLowerCase() === "daily") {
         // For daily reports, use the historical API to get hourly data (0-23)
-        url = `${API_BASE_URL}/pointgrab_historical_based_on_hour?from=${startTimestamp}&to=${endTimestamp}&zone=${encodeURIComponent(zone)}`;
+        const startStr = new Date(startTimestamp).toISOString().split('T')[0];
+        const endStr = new Date(endTimestamp).toISOString().split('T')[0];
+        url = `${API_BASE_URL}/occupancy_hourly_summary?start=${startStr}&end=${endStr}`;
         
         const response = await fetch(url);
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
@@ -236,16 +348,19 @@ const HistoricalOccupancy = () => {
         
         // Fill in actual data
         if (Array.isArray(data)) {
-          data.forEach(item => {
-            const hour = safeParseNumber(item.hour);
-            if (hour >= 0 && hour <= 23) {
-              chartData[hour].occupancyPercentage = safeParseNumber(item.occupancyPercentage);
+          const filtered = data.filter(d => (d.area || d.zone) === (zone.split('-')[0] || zone));
+          filtered.forEach(item => {
+            const hourUtc = safeParseNumber(item.hour);
+            const hourHkt = (((hourUtc + 8) % 24) + 24) % 24;
+            if (hourHkt >= 0 && hourHkt <= 23) {
+              chartData[hourHkt].occupancyPercentage = safeParseNumber(item.occupancy_percentage_avg ?? item.occupancyPercentage);
             }
           });
         } else if (data && data.hour !== undefined) {
-          const hour = safeParseNumber(data.hour);
-          if (hour >= 0 && hour <= 23) {
-            chartData[hour].occupancyPercentage = safeParseNumber(data.occupancyPercentage);
+          const hourUtc = safeParseNumber(data.hour);
+          const hourHkt = (((hourUtc + 8) % 24) + 24) % 24;
+          if (hourHkt >= 0 && hourHkt <= 23) {
+            chartData[hourHkt].occupancyPercentage = safeParseNumber(data.occupancy_percentage_avg ?? data.occupancyPercentage);
           }
         }
         
@@ -255,7 +370,9 @@ const HistoricalOccupancy = () => {
         }));
       } else {
         // For other report types, use the regular API
-        url = `${API_BASE_URL}/pointgrab?from=${startTimestamp}&to=${endTimestamp}&zone=${encodeURIComponent(zone)}`;
+        const startStr = new Date(startTimestamp).toISOString().split('T')[0];
+        const endStr = new Date(endTimestamp).toISOString().split('T')[0];
+        url = `${API_BASE_URL}/occupancy_daily_summary?start=${startStr}&end=${endStr}`;
         
         const response = await fetch(url);
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
@@ -263,11 +380,32 @@ const HistoricalOccupancy = () => {
         
         // Process data for date-based charts
         const dataArray = Array.isArray(data) ? data : [data];
-        const chartData = dataArray.map(item => ({
-          date: item.date || new Date().toISOString().split('T')[0],
-          date_display: formatDateForChart(item.date),
-          occupancyPercentage: safeParseNumber(item.occupancyPercentage)
-        }));
+        const filtered = dataArray.filter(d => (selectedArea === 'All Areas') ? true : ((d.area || d.zone) === zone.split('-')[0] || (d.area || d.zone) === selectedArea));
+        const chartData = filtered.map(item => {
+          let dateStr = '';
+          if (item.day && typeof item.day === 'string') {
+            const match = item.day.match(/^(\d{4})-(\d{2})-(\d{2})/);
+            if (match) {
+              const y = Number(match[1]);
+              const m = Number(match[2]);
+              const d = Number(match[3]);
+              const msUtc = Date.UTC(y, m - 1, d, 0, 0, 0);
+              const msHkt = msUtc + 8 * 60 * 60 * 1000;
+              dateStr = new Date(msHkt).toISOString().split('T')[0];
+            } else {
+              const parsed = Date.parse(item.day);
+              if (!Number.isNaN(parsed)) {
+                dateStr = new Date(parsed + 8 * 60 * 60 * 1000).toISOString().split('T')[0];
+              }
+            }
+          }
+          if (!dateStr) dateStr = item.date || new Date().toISOString().split('T')[0];
+          return {
+            date: dateStr,
+            date_display: formatDateForChart(dateStr),
+            occupancyPercentage: safeParseNumber(item.occupancy_percentage_avg ?? item.occupancyPercentage)
+          };
+        });
         
         setChartDataMap(prev => ({
           ...prev,
@@ -284,8 +422,12 @@ const HistoricalOccupancy = () => {
     console.log("Testing API connection...");
     try {
       // Test with the new API endpoints
-      const testTimestamp = Date.now();
-      const testUrl = `${API_BASE_URL}/pointgrab?from=${testTimestamp - 86400000}&to=${testTimestamp}&zone=${selectedArea}`;
+      const now = new Date();
+      const endStr = now.toISOString().split('T')[0];
+      const start = new Date(now);
+      start.setDate(start.getDate() - 7);
+      const startStr = start.toISOString().split('T')[0];
+      const testUrl = `${API_BASE_URL}/occupancy_daily_summary?start=${startStr}&end=${endStr}`;
       console.log("Test URL:", testUrl);
       
       const response = await fetch(testUrl);
@@ -326,75 +468,34 @@ const HistoricalOccupancy = () => {
     
     try {
       let data;
-      let startTimestamp, endTimestamp;
       
       if (reportType.toLowerCase() === "daily") {
         console.log("Fetching daily data using hourly API...");
         // For Daily reports, use hourly API data
-        const selectedDate = new Date(dateRange.selectedDate);
-        startTimestamp = selectedDate.getTime();
-        endTimestamp = selectedDate.getTime() + (24 * 60 * 60 * 1000) - 1;
+        const startStr = dateRange.selectedDate;
+        const endStr = dateRange.selectedDate;
         
-        if (selectedArea === "All Areas") {
-          // Fetch data for all zones
-          data = await fetchAllZonesData(startTimestamp, endTimestamp, "daily");
-        } else {
-          // Fetch data for single zone
-          const url = `${API_BASE_URL}/pointgrab_historical_based_on_hour?from=${startTimestamp}&to=${endTimestamp}&zone=${encodeURIComponent(selectedArea)}`;
-          console.log("Daily URL:", url);
-          
-          const response = await fetch(url);
-          if (!response.ok) {
-            const errorText = await response.text();
-            console.error("API Error Response:", errorText);
-            throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
-          }
-          
-          data = await response.json();
-        }
+        // Fetch data (all areas) - DO NOT filter here
+        data = await fetchAllZonesData(startStr, endStr, "daily");
+        logApiResponse("occupancy_hourly_summary", data);
         
-        logApiResponse("pointgrab_historical_based_on_hour", data);
+        // Process the data - filtering will happen inside processApiData
         const processedData = processApiData(data, "daily");
         setTableData(processedData);
         
       } else {
         console.log(`Fetching ${reportType} report data...`);
         // For Weekly, Monthly, Custom reports, use regular API
+        const startStr = dateRange.startDate;
+        const endStr = dateRange.endDate;
         
-        // Calculate timestamps for the exact date range (inclusive)
-        const startDate = new Date(dateRange.startDate);
-        const endDate = new Date(dateRange.endDate);
-        
-        // Start of the start date (00:00:00)
-        startDate.setHours(0, 0, 0, 0);
-        startTimestamp = startDate.getTime();
-        
-        // End of the end date (23:59:59.999)
-        endDate.setHours(23, 59, 59, 999);
-        endTimestamp = endDate.getTime();
-        
-        if (selectedArea === "All Areas") {
-          // Fetch data for all zones
-          data = await fetchAllZonesData(startTimestamp, endTimestamp, "period");
-        } else {
-          // Fetch data for single zone
-          const url = `${API_BASE_URL}/pointgrab?from=${startTimestamp}&to=${endTimestamp}&zone=${encodeURIComponent(selectedArea)}`;
-          console.log(`${reportType} URL:`, url);
-          
-          const response = await fetch(url);
-          if (!response.ok) {
-            const errorText = await response.text();
-            console.error("API Error Response:", errorText);
-            throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
-          }
-          
-          data = await response.json();
-        }
-        
-        logApiResponse("pointgrab", data);
-        
-        // For Weekly, Monthly, Custom reports, calculate averages instead of showing individual records
-        const averageData = calculateAveragesForPeriod(data, reportType);
+        // Fetch data (all areas)
+        data = await fetchAllZonesData(startStr, endStr, "period");
+        // Apply area filter on client
+        const filtered = selectedArea === "All Areas" ? data : data.filter(d => (d.area || d.zone) === selectedArea);
+        logApiResponse("occupancy_daily_summary", filtered);
+        // For Weekly, Monthly, Custom reports, calculate averages
+        const averageData = calculateAveragesForPeriod(filtered, reportType);
         setTableData(averageData);
       }
       
@@ -453,36 +554,6 @@ const HistoricalOccupancy = () => {
     }
   };
 
-
-  //export csv
-  // const handleExportCSV = () => {
-  //   if (tableData.length === 0) return;
-    
-  //   let csvContent = "data:text/csv;charset=utf-8,";
-    
-  //   if (reportType === "hourly") {
-  //     csvContent += "Area ID,Occupancy,Occupancy Percentage,Hour\n";
-  //     csvContent += tableData.map(row => 
-  //       `${row.area_id},${row.occupancy || 0},${row.occupancy_percentage || '0.00%'},${formatHour(row.hour)}`
-  //     ).join("\n");
-  //   } else {
-  //     csvContent += "Area ID,Average Hourly Occupancy,Occupancy Percentage\n";
-  //     csvContent += tableData.map(row => 
-  //       `${row.area_id},${row.average_hourly_occupancy || '0.00'},${row.occupancy_percentage || '0.00%'}`
-  //     ).join("\n");
-  //   }
-    
-  //   const encodedUri = encodeURI(csvContent);
-  //   const link = document.createElement("a");
-  //   link.setAttribute("href", encodedUri);
-  //   link.setAttribute("download", `occupancy_report_${reportType}_${new Date().toISOString().split('T')[0]}.csv`);
-  //   document.body.appendChild(link);
-  //   link.click();
-  //   document.body.removeChild(link);
-  // };
-
-  
-    
   // Initial load
   useEffect(() => {
     fetchData();
@@ -584,7 +655,7 @@ const HistoricalOccupancy = () => {
                       </td>
                       <td className="text-center px-4 py-4 text-gray-700 font-medium">
                         {item.occupancyPercentage !== undefined && item.occupancyPercentage !== null ? 
-                          `${item.occupancyPercentage}%` : '0.00%'}
+                          `${item.occupancyPercentage}%` : '0%'}
                       </td>
                       <td className="text-center px-4 py-4">
                         <div className="flex justify-center">
@@ -633,19 +704,6 @@ const HistoricalOccupancy = () => {
             </button>
           </div>
         )}
-
-        {/* Export Button 
-        {tableData.length > 0 && (
-          <div className="px-8 py-4 border-t border-gray-200 bg-gray-50">
-            <button
-              onClick={handleExportCSV}
-              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium transition"
-            >
-              Export CSV
-            </button>
-          </div>
-        )}
-        */}
 
         {/* Pagination */}
         {tableData.length > 0 && totalPages > 1 && (

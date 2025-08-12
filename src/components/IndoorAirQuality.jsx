@@ -528,71 +528,169 @@ const exportToCSV = () => {
     });
   }, [reportType]);
 
-  // Fetch IAQ data based on report type
-  const fetchIAQData = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
+// Utility: Format date in local timezone as YYYY-MM-DD
+const formatDateLocal = (date) => {
+  const d = new Date(date);
+  return (
+    d.getFullYear() +
+    '-' +
+    String(d.getMonth() + 1).padStart(2, '0') +
+    '-' +
+    String(d.getDate()).padStart(2, '0')
+  );
+};
 
-    try {
-      const dateRange = getDateRange();
-      let url;
-      
+const fetchIAQData = useCallback(async () => {
+  setIsLoading(true);
+  setError(null);
+
+  try {
+    const dateRange = getDateRange();
+    let url;
+
+    // Start date - exact local date
+    const startStr = formatDateLocal(dateRange.fromDate);
+
+    // End date fix: For non-daily, subtract 1 day to avoid extra day fetch
+    let endDate = new Date(dateRange.toDate);
+    if (reportType !== "daily") {
+      endDate.setDate(endDate.getDate() - 1);
+    }
+    const endStr = formatDateLocal(endDate);
+
+    if (reportType === "daily") {
+      url = `http://optimus-india-njs-01.netbird.cloud:3005/pcs/optimus/9in1_iaq_history/hour?start=${startStr}&end=${endStr}`;
+    } else {
+      url = `http://optimus-india-njs-01.netbird.cloud:3005/pcs/optimus/9in1_iaq_history/day?start=${startStr}&end=${endStr}`;
+    }
+
+    console.log('Fetching from URL:', url, 'Report Type:', reportType);
+
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('API Response:', data);
+
+    if (Array.isArray(data)) {
+      let mapped = [];
+
       if (reportType === "daily") {
-        // Use hourly endpoint for daily reports
-        url = `https://api.powerworkplace.com/api:P-MhDvE_/9_in_1_based_on_hour?from=${dateRange.fromDate}&to=${dateRange.toDate}&areaId=office`;
+        mapped = data.map((d) => ({
+          timestamp: d.timestamp,
+          temperature: d.temperature,
+          humidity: d.humidity,
+          co2: d.co2,
+          tvoc: d.tvoc,
+          light: d.light,
+          pm2_5: d.pm2_5,
+          pm10: d.pm10,
+          pressure: d.pressure,
+          hcho: d.hcho,
+          score: d.score,
+          o3: 0,
+        }));
       } else {
-        // Use non-hourly endpoint for other reports
-        url = `https://api.powerworkplace.com/api:P-MhDvE_/9_in_1?from=${dateRange.fromDate}&to=${dateRange.toDate}&areaId=office`;
+        mapped = data.map((d) => ({
+          date: d.day?.split('T')[0]?.replace(/-/g, '/'),
+          temperature: d.avg_temperature,
+          humidity: d.avg_humidity,
+          co2: d.avg_co2,
+          tvoc: d.avg_tvoc,
+          light: d.avg_light,
+          pm2_5: d.avg_pm2_5,
+          pm10: d.avg_pm10,
+          pressure: d.avg_pressure,
+          hcho: d.avg_hcho,
+          score: d.avg_score,
+          o3: 0,
+          timestamp: d.day ? new Date(d.day).getTime() : undefined,
+        }));
       }
 
-      console.log('Fetching from URL:', url);
-      const response = await fetch(url);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
+      processIAQData(mapped);
+    } else {
+      console.warn('API response is not an array:', data);
+      processIAQData([]);
+    }
+  } catch (err) {
+    console.error("Error fetching IAQ data:", err);
+    setError(`Failed to fetch IAQ data: ${err.message}`);
+  } finally {
+    setIsLoading(false);
+  }
+}, [getDateRange, processIAQData, reportType]);
+
+
+
+ // Auto-refresh functionality with fixed date handling
+const refreshIAQDataSilently = useCallback(async () => {
+  try {
+    const dateRange = getDateRange();
+
+    // Start date - exact local date
+    const startStr = formatDateLocal(dateRange.fromDate);
+
+    // End date fix: For non-daily, subtract 1 day to avoid extra day fetch
+    let endDate = new Date(dateRange.toDate);
+    if (reportType !== "daily") {
+      endDate.setDate(endDate.getDate() - 1);
+    }
+    const endStr = formatDateLocal(endDate);
+
+    let url;
+    if (reportType === "daily") {
+      url = `http://optimus-india-njs-01.netbird.cloud:3005/pcs/optimus/9in1_iaq_history/hour?start=${startStr}&end=${endStr}`;
+    } else {
+      url = `http://optimus-india-njs-01.netbird.cloud:3005/pcs/optimus/9in1_iaq_history/day?start=${startStr}&end=${endStr}`;
+    }
+
+    const response = await fetch(url);
+    if (response.ok) {
       const data = await response.json();
-      console.log('API Response:', data);
-
       if (Array.isArray(data)) {
-        processIAQData(data);
-      } else {
-        console.warn('API response is not an array:', data);
-        processIAQData([]);
-      }
-    } catch (err) {
-      console.error("Error fetching IAQ data:", err);
-      setError(`Failed to fetch IAQ data: ${err.message}`);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [getDateRange, processIAQData, reportType]);
-
-
-  // Auto-refresh functionality
-  const refreshIAQDataSilently = useCallback(async () => {
-    try {
-      const dateRange = getDateRange();
-      let url;
-      
-      if (reportType === "daily") {
-        url = `https://api.powerworkplace.com/api:P-MhDvE_/9_in_1_based_on_hour?from=${dateRange.fromDate}&to=${dateRange.toDate}&areaId=office`;
-      } else {
-        url = `https://api.powerworkplace.com/api:P-MhDvE_/9_in_1?from=${dateRange.fromDate}&to=${dateRange.toDate}&areaId=office`;
-      }
-
-      const response = await fetch(url);
-      if (response.ok) {
-        const data = await response.json();
-        if (Array.isArray(data)) {
-          processIAQData(data);
+        let mapped = [];
+        if (reportType === "daily") {
+          mapped = data.map((d) => ({
+            timestamp: d.timestamp,
+            temperature: d.temperature,
+            humidity: d.humidity,
+            co2: d.co2,
+            tvoc: d.tvoc,
+            light: d.light,
+            pm2_5: d.pm2_5,
+            pm10: d.pm10,
+            pressure: d.pressure,
+            hcho: d.hcho,
+            score: d.score,
+            o3: 0,
+          }));
+        } else {
+          mapped = data.map((d) => ({
+            date: d.day?.split('T')[0]?.replace(/-/g, '/'),
+            temperature: d.avg_temperature,
+            humidity: d.avg_humidity,
+            co2: d.avg_co2,
+            tvoc: d.avg_tvoc,
+            light: d.avg_light,
+            pm2_5: d.avg_pm2_5,
+            pm10: d.avg_pm10,
+            pressure: d.avg_pressure,
+            hcho: d.avg_hcho,
+            score: d.avg_score,
+            o3: 0,
+            timestamp: d.day ? new Date(d.day).getTime() : undefined,
+          }));
         }
+        processIAQData(mapped);
       }
-    } catch (err) {
-      console.error("Error refreshing IAQ data:", err);
     }
-  }, [getDateRange, processIAQData, reportType]);
+  } catch (err) {
+    console.error("Error refreshing IAQ data:", err);
+  }
+}, [getDateRange, processIAQData, reportType]);
 
   // Initial data fetch when component mounts and when dates change
   useEffect(() => {

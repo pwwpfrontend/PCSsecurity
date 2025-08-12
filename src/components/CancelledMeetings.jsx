@@ -81,6 +81,44 @@ const CancelledMeetings = () => {
     cancellationRate: 0,
   });
 
+  // Helper: convert number / numeric-string / ISO date-string to ms
+  const parseToMs = (value) => {
+    if (value === null || value === undefined) return undefined;
+    if (value instanceof Date) return value.getTime();
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string') {
+      const str = value.trim();
+      // Check if it's a pure number string
+      if (/^\d+$/.test(str)) {
+        const n = Number(str);
+        return Number.isFinite(n) ? n : undefined;
+      }
+      // Try to parse as ISO date string or any valid date format
+      const parsed = Date.parse(str);
+      return Number.isNaN(parsed) ? undefined : parsed;
+    }
+    return undefined;
+  };
+
+  // Normalize API meeting item to expected shapes and numeric timestamps
+  const normalizeMeeting = (item, idx) => {
+    // Parse timestamp (now comes as ISO string from new API)
+    const ts = parseToMs(item?.timestamp);
+    const startTs = parseToMs(item?.start_timestamp ?? item?.startTime ?? item?.start);
+    const endTs = parseToMs(item?.end_timestamp ?? item?.endTime ?? item?.end);
+    const resourceType = (item?.resourceType ?? item?.resource_type ?? '').toString().toLowerCase();
+
+    return {
+      ...item,
+      // Generate a unique ID if not present, using timestamp and index
+      id: item?.id ?? `${ts || Date.now()}-${idx}`,
+      resourceType: resourceType || 'unknown',
+      timestamp: typeof ts === 'number' ? ts : Date.now(),
+      start_timestamp: typeof startTs === 'number' ? startTs : (typeof ts === 'number' ? ts : Date.now()),
+      end_timestamp: typeof endTs === 'number' ? endTs : (typeof startTs === 'number' ? startTs : (typeof ts === 'number' ? ts : Date.now())),
+    };
+  };
+
   // Format dates for API call - convert to timestamp
   const formatDateForAPI = (date) => {
     return date.getTime();
@@ -88,22 +126,27 @@ const CancelledMeetings = () => {
 
   // Format timestamp to readable date
   const formatTimestampToDate = (timestamp) => {
-    const date = new Date(timestamp);
-    const day = String(date.getDate()).padStart(2, '0');
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const year = date.getFullYear();
+    const ms = parseToMs(timestamp);
+    if (ms === undefined) return '';
+    const hktString = new Date(ms).toLocaleString('en-US', { timeZone: 'Asia/Hong_Kong' });
+    const hktDate = new Date(hktString);
+    const day = String(hktDate.getDate()).padStart(2, '0');
+    const month = String(hktDate.getMonth() + 1).padStart(2, '0');
+    const year = hktDate.getFullYear();
     const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const dayShortName = dayNames[date.getDay()];
+    const dayShortName = dayNames[hktDate.getDay()];
     return `${day}/${month}/${year} ${dayShortName}`;
   };
 
   // Format timestamp to readable time
   const formatTimestampToTime = (timestamp) => {
-    const date = new Date(timestamp);
-    return date.toLocaleTimeString('en-US', { 
-      hour: '2-digit', 
+    const ms = parseToMs(timestamp);
+    if (ms === undefined) return '';
+    return new Date(ms).toLocaleTimeString('en-US', {
+      hour: '2-digit',
       minute: '2-digit',
-      hour12: true 
+      hour12: true,
+      timeZone: 'Asia/Hong_Kong'
     });
   };
 
@@ -121,57 +164,56 @@ const CancelledMeetings = () => {
       setIsLoading(true);
       setError(null);
       
-      const response = await fetch('https://api.powerworkplace.com/api:rl2yc254/auto_cancel?customerId=pcs');
+      const response = await fetch('http://optimus-india-njs-01.netbird.cloud:3005/pcs/optimus/canceled_meetings');
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
       const data = await response.json();
-      setCancelledMeetingsData(data);
+      const arr = Array.isArray(data) ? data : (Array.isArray(data?.results) ? data.results : []);
+      const normalized = arr.map((item, idx) => normalizeMeeting(item, idx));
+      setCancelledMeetingsData(normalized);
       
     } catch (err) {
       console.error('Error fetching cancelled meetings:', err);
       setError('Failed to fetch cancelled meetings data. Please try again.');
-      // Fallback to mock data for demonstration
+      // Fallback to mock data for demonstration using the new API response format
       const mockData = [
         {
-          id: 9,
-          created_at: 1692416861527,
-          customerId: 'pcs',
-          resourceType: 'room',
-          organizer_email: 'alaa.abukmeil@powerworkplace.com',
-          resource_name: 'Einstein',
-          start_timestamp: 1692374400000,
-          end_timestamp: 1692460800000,
-          organizer_name: 'Alaa Abukmeil',
-          subject: ''
+          resource_name: "Einstein",
+          customerId: "pcs",
+          resourceType: "room",
+          subject: "Booked",
+          start_timestamp: 1754956800000,
+          end_timestamp: 1754989200000,
+          organizer_name: "Alayne Pang",
+          organizer_email: "alayne_pang@pcs-security.com",
+          timestamp: "2025-08-12T00:00:00.000000Z"
         },
         {
-          id: 10,
-          created_at: 1692416861805,
-          customerId: 'pcs',
-          resourceType: 'room',
-          organizer_email: 'alaa.abukmeil@powerworkplace.com',
-          resource_name: 'Morse',
-          start_timestamp: 1692374400000,
-          end_timestamp: 1692460800000,
-          organizer_name: 'Alaa Abukmeil',
-          subject: ''
+          resource_name: "Nobel",
+          customerId: "pcs",
+          resourceType: "room",
+          subject: "Booked",
+          start_timestamp: 1754956800000,
+          end_timestamp: 1754989200000,
+          organizer_name: "Alayne Pang",
+          organizer_email: "alayne_pang@pcs-security.com",
+          timestamp: "2025-08-12T00:00:00.000000Z"
         },
         {
-          id: 11,
-          created_at: 1692416862000,
-          customerId: 'pcs',
-          resourceType: 'desk',
-          organizer_email: 'john.doe@powerworkplace.com',
-          resource_name: 'Desk A1',
-          start_timestamp: 1692360000000,
-          end_timestamp: 1692367200000,
-          organizer_name: 'John Doe',
-          subject: ''
+          resource_name: "Edison",
+          customerId: "pcs",
+          resourceType: "room",
+          subject: "Smart Auto Book Meeting",
+          start_timestamp: 1754932500000,
+          end_timestamp: 1754934300000,
+          organizer_name: "alan.yeung",
+          organizer_email: "alan.yeung@powerworkplace.com",
+          timestamp: "2025-08-11T17:15:00.000000Z"
         }
       ];
-      setCancelledMeetingsData(mockData);
+      setCancelledMeetingsData(mockData.map((m, i) => normalizeMeeting(m, i)));
     } finally {
       setIsLoading(false);
     }
@@ -188,11 +230,11 @@ const CancelledMeetings = () => {
       );
     }
     
-    // Filter by applied date range
+    // Filter by applied date range using timestamp
     const dateRange = getAppliedDateRange();
     filteredData = filteredData.filter(item => {
-      const itemDate = item.created_at;
-      return itemDate >= dateRange.fromDate && itemDate <= dateRange.toDate;
+      const itemDate = typeof item.timestamp === 'number' ? item.timestamp : parseToMs(item.timestamp);
+      return typeof itemDate === 'number' && itemDate >= dateRange.fromDate && itemDate <= dateRange.toDate;
     });
     
     return filteredData;
@@ -290,22 +332,29 @@ const CancelledMeetings = () => {
   // Export CSV function
   const exportToCSV = () => {
     try {
-      if (chartData.length === 0) {
+      const filteredData = getFilteredData();
+      if (filteredData.length === 0) {
         alert('No data available for export');
         return;
       }
 
-      const csvData = chartData.map(item => ({
-        'Date/Time': item.displayTime || item.date,
-        'Cancelled Meetings': item.cancelled || 0,
-        'Total Meetings': item.total || 0,
-        'Cancellation Rate (%)': item.cancellationRate ? item.cancellationRate.toFixed(2) : '0.00'
+      const csvData = filteredData.map(meeting => ({
+        'Organizer': meeting.organizer_name || '',
+        'Customer': meeting.organizer_email || '',
+        'Venue': meeting.resource_name || '',
+        'Type': meeting.resourceType || '',
+        'Meeting Date': formatTimestampToDate(meeting.start_timestamp),
+        'Start Time': formatTimestampToTime(meeting.start_timestamp),
+        'End Time': formatTimestampToTime(meeting.end_timestamp),
+        'Cancel Time': formatTimestampToTime(meeting.timestamp),
+        'Duration': calculateDuration(meeting.start_timestamp, meeting.end_timestamp),
+        'Subject': meeting.subject || ''
       }));
 
       const headers = Object.keys(csvData[0]);
       const csvContent = [
         headers.join(','),
-        ...csvData.map(row => headers.map(header => row[header]).join(','))
+        ...csvData.map(row => headers.map(header => `"${row[header]}"`).join(','))
       ].join('\n');
 
       const blob = new Blob([csvContent], { type: 'text/csv' });
@@ -313,7 +362,7 @@ const CancelledMeetings = () => {
       const link = document.createElement('a');
       link.href = url;
 
-      const dateRange = getDateRange();
+      const dateRange = getAppliedDateRange();
       const fromDate = new Date(dateRange.fromDate).toISOString().split('T')[0];
       const toDate = new Date(dateRange.toDate).toISOString().split('T')[0];
       const filename = `Cancelled_Meetings_${fromDate}_to_${toDate}.csv`;
@@ -416,21 +465,21 @@ const CancelledMeetings = () => {
 
   // Get date display string based on report type
   const getDateDisplayString = () => {
-    const dateRange = getDateRange();
+    const dateRange = getAppliedDateRange();
     let dateString = "";
 
-    if (reportType === "daily") {
+    if (appliedReportType === "daily") {
       const date = new Date(dateRange.fromDate);
       dateString = `${String(date.getDate()).padStart(2, "0")}-${String(
         date.getMonth() + 1
       ).padStart(2, "0")}-${date.getFullYear()}`;
-    } else if (reportType === "weekly") {
+    } else if (appliedReportType === "weekly") {
       const fromDate = new Date(dateRange.fromDate);
       const toDate = new Date(dateRange.toDate);
       dateString = `${formatDateDisplay(fromDate)} to ${formatDateDisplay(
         toDate
       )} (Weekly)`;
-    } else if (reportType === "monthly") {
+    } else if (appliedReportType === "monthly") {
       const [year, month] = dateRange.month.split("-");
       const monthNames = [
         "January", "February", "March", "April", "May", "June",
@@ -672,8 +721,8 @@ const CancelledMeetings = () => {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {getFilteredData().map((meeting) => (
-                      <tr key={meeting.id} className="hover:bg-gray-50">
+                    {getFilteredData().map((meeting, idx) => (
+                      <tr key={meeting.id ?? `${meeting.timestamp}-${idx}`} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 text-center">
                           {meeting.organizer_name}
                         </td>
@@ -685,15 +734,15 @@ const CancelledMeetings = () => {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-center">
                           <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                            meeting.resourceType.toLowerCase() === 'room' 
+                            (meeting.resourceType || '').toLowerCase() === 'room' 
                               ? 'bg-blue-100 text-blue-800' 
                               : 'bg-green-100 text-green-800'
                           }`}>
-                            {meeting.resourceType.charAt(0).toUpperCase() + meeting.resourceType.slice(1)}
+                            {(meeting.resourceType || '').charAt(0).toUpperCase() + (meeting.resourceType || '').slice(1)}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
-                          {formatTimestampToDate(meeting.created_at)}
+                          {formatTimestampToDate(meeting.start_timestamp)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
                           {formatTimestampToTime(meeting.start_timestamp)}
@@ -702,7 +751,7 @@ const CancelledMeetings = () => {
                           {formatTimestampToTime(meeting.end_timestamp)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
-                          {formatTimestampToTime(meeting.created_at)}
+                          {formatTimestampToTime(meeting.timestamp)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
                           {calculateDuration(meeting.start_timestamp, meeting.end_timestamp)}

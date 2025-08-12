@@ -13,27 +13,38 @@ const OccupancyFilters = ({
   formatHour
 
 }) => {
-  // Helper function to get week range (7 days ending on selected date)
+  // Format a Date as local YYYY-MM-DD without UTC shifting
+  const formatDateLocal = (dateLike) => {
+    const d = new Date(dateLike);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+  
+  // FIX 2: Corrected week range calculation (7 days ending on selected date)
   const getWeekRange = (endDate) => {
     const end = new Date(endDate);
     const start = new Date(end);
     start.setDate(end.getDate() - 6); // 6 days before to make it exactly 7 days total
     
     return {
-      startDate: start.toISOString().split("T")[0],
-      endDate: end.toISOString().split("T")[0]
+      startDate: formatDateLocal(start),
+      endDate: formatDateLocal(end)
     };
   };
 
-  // Helper function to get month range (proper month days)
+  // FIX 2: Corrected month range calculation (actual first and last day of the month)
   const getMonthRange = (selectedDate) => {
     const date = new Date(selectedDate);
+    // Use the actual first day of the selected month (no offset)
     const startOfMonth = new Date(date.getFullYear(), date.getMonth(), 1);
-    const endOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0); // Last day of the month
+    // Use the actual last day of the selected month (no offset)
+    const endOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0);
     
     return {
-      startDate: startOfMonth.toISOString().split("T")[0],
-      endDate: endOfMonth.toISOString().split("T")[0]
+      startDate: formatDateLocal(startOfMonth),
+      endDate: formatDateLocal(endOfMonth)
     };
   };
 
@@ -51,17 +62,16 @@ const OccupancyFilters = ({
         endDate: weekRange.endDate
       }));
     } else if (reportType === "monthly" && name === "selectedDate") {
-      // For monthly reports, calculate the month range
-      const selectedDate = new Date(value);
-      const startOfMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1).toISOString().split('T')[0];
-      const endOfMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0).toISOString().split('T')[0];
+      // For monthly reports, calculate the month range using corrected logic
+      const monthRange = getMonthRange(value);
       setDateRange(prev => ({
         ...prev,
         selectedDate: value,
-        startDate: startOfMonth,
-        endDate: endOfMonth
+        startDate: monthRange.startDate,
+        endDate: monthRange.endDate
       }));
     } else {
+      // FIX 2: For custom reports, use exact startDate and endDate without alterations
       setDateRange(prev => ({
         ...prev,
         [name]: value
@@ -74,7 +84,7 @@ const OccupancyFilters = ({
     setReportType(newReportType);
 
     // Update date range based on report type
-    const today = new Date().toISOString().split("T")[0];
+    const today = formatDateLocal(new Date());
     
     if (newReportType === "daily") {
       setDateRange({
@@ -90,15 +100,15 @@ const OccupancyFilters = ({
         endDate: weekRange.endDate
       });
     } else if (newReportType === "monthly") {
-      // For monthly, set to current month range
-      const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
-      const endOfMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().split('T')[0];
+      // FIX 2: For monthly, set to current month range using corrected logic
+      const monthRange = getMonthRange(today);
       setDateRange({
         selectedDate: today,
-        startDate: startOfMonth,
-        endDate: endOfMonth
+        startDate: monthRange.startDate,
+        endDate: monthRange.endDate
       });
     } else if (newReportType === "custom") {
+      // FIX 2: For custom reports, start with today's date range
       setDateRange({
         selectedDate: today,
         startDate: today,

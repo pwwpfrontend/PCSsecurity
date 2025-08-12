@@ -7,7 +7,7 @@ import {
   MeetingRooms,
 } from "."; // ✅ fixed path
 
-const API_URL = "https://njs-01.optimuslab.space/webhook/pcs/9_in_1";
+const API_URL = "http://optimus-india-njs-01.netbird.cloud:3005/pcs/optimus/9in1_iaq_live";
 
 const Dashboard = () => {
   const [metrics, setMetrics] = useState([]);

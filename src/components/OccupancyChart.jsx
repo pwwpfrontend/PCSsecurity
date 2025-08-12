@@ -18,7 +18,7 @@ const zoneColors = {
   "Zone C": "#4354b3",  
 };
 
-const OCCUPANCY_API_URL = "https://njs-01.optimuslab.space/webhook/pcs/occupancy_live";
+const OCCUPANCY_API_URL = "http://optimus-india-njs-01.netbird.cloud:3005/pcs/optimus/occupancy_live";
 
 const OccupancyChart = () => {
   const [zoneOccupancy, setZoneOccupancy] = useState([]);

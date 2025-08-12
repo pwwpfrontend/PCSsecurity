@@ -10,7 +10,7 @@ import {
 } from "recharts";
 import { Users } from "lucide-react";
 
-const OCCUPANCY_HISTORY_API_URL = "https://api.powerworkplace.com/api:P-MhDvE_/last24HourZoneOccupancyPercentages";
+const OCCUPANCY_HISTORY_API_URL = "http://optimus-india-njs-01.netbird.cloud:3005/pcs/optimus/occupancy_history_g";
 
 // Function to format hour to display format (8am, 9am, 12pm, etc.)
 const formatHourToDisplay = (hour) => {
@@ -66,7 +66,15 @@ const OccupancyLoadChart = () => {
       }
       
       const data = await response.json();
-      const transformedData = transformToOccupancyLoad(data);
+      
+      // Map new API format to old API format
+      const mappedData = data.map(item => ({
+        hour: item.hour,
+        occupancy: item.r_occupancy_percentage_avg,
+        timestamp: item.timestamp_hour
+      }));
+      
+      const transformedData = transformToOccupancyLoad(mappedData);
       
       setOccupancyLoadData(transformedData);
       setError(null);

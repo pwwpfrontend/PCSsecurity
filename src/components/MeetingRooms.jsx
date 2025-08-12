@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Monitor } from "lucide-react";
 
-const ROOM_MEETINGS_API_URL = "https://api.powerworkplace.com/api:lToIpusH/humlylivemeetings?customerId=pcs";
+const ROOM_MEETINGS_API_URL = "http://optimus-india-njs-01.netbird.cloud:3005/pcs/optimus/meetings_live";
 
 // Define all meeting rooms
 const ALL_MEETING_ROOMS = [
@@ -36,17 +36,14 @@ const MeetingRooms = () => {
       let liveMeetings = [];
       
       if (Array.isArray(apiResponse)) {
-        // If response is array, find the first item with liveMeetings
-        const dataItem = apiResponse.find(item => item.liveMeetings && Array.isArray(item.liveMeetings));
-        if (dataItem) {
-          liveMeetings = dataItem.liveMeetings;
-        }
+        // New API returns direct array
+        liveMeetings = apiResponse;
       } else if (apiResponse.liveMeetings && Array.isArray(apiResponse.liveMeetings)) {
         // If response is object with liveMeetings property
         liveMeetings = apiResponse.liveMeetings;
       } else {
-        console.error("API response doesn't contain liveMeetings array:", apiResponse);
-        throw new Error("Invalid API response format - missing liveMeetings");
+        console.error("API response doesn't contain meetings array:", apiResponse);
+        throw new Error("Invalid API response format - missing meetings");
       }
 
       console.log("Extracted liveMeetings:", liveMeetings);
@@ -59,13 +56,13 @@ const MeetingRooms = () => {
       const occupiedRoomNames = liveMeetings
         .filter(meeting => {
           // Check if meeting object has required properties
-          if (!meeting.startTimeTimestamp || !meeting.endTimeTimestamp || !meeting.area) {
+          if (!meeting.startTime || !meeting.endTime || !meeting.area) {
             console.warn("Meeting object missing required properties:", meeting);
             return false;
           }
 
-          const start = Number(meeting.startTimeTimestamp);
-          const end = Number(meeting.endTimeTimestamp);
+          const start = Number(meeting.startTime);
+          const end = Number(meeting.endTime);
 
           // Check if timestamps are valid numbers
           if (isNaN(start) || isNaN(end)) {
@@ -76,8 +73,8 @@ const MeetingRooms = () => {
           const isActive = now >= start && now <= end;
 
           console.log(`Checking room: ${meeting.area}`, {
-            startTimeTimestamp: meeting.startTimeTimestamp,
-            endTimeTimestamp: meeting.endTimeTimestamp,
+            startTime: meeting.startTime,
+            endTime: meeting.endTime,
             startUTC: new Date(start).toISOString(),
             endUTC: new Date(end).toISOString(),
             nowUTC: new Date(now).toISOString(),

@@ -5,6 +5,27 @@ const OccupancyCharts = ({ item, reportType, chartData = [], dateRange = {} }) =
   // Updated colors for charts
   const COLORS = ['#2464EC', '#82C0CB', '#FFBB28', '#FF8042', '#8884d8'];
 
+  // Safely convert API 'day' (UTC date string) to HKT YYYY-MM-DD
+  const normalizeDayToHktDate = (dayStr) => {
+    if (!dayStr || typeof dayStr !== 'string') return '';
+    const match = dayStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+      const y = Number(match[1]);
+      const m = Number(match[2]);
+      const d = Number(match[3]);
+      const msUtc = Date.UTC(y, m - 1, d, 0, 0, 0);
+      const msHkt = msUtc + 8 * 60 * 60 * 1000;
+      const iso = new Date(msHkt).toISOString();
+      return iso.split('T')[0];
+    }
+    const parsed = Date.parse(dayStr);
+    if (!Number.isNaN(parsed)) {
+      const msHkt = parsed + 8 * 60 * 60 * 1000;
+      return new Date(msHkt).toISOString().split('T')[0];
+    }
+    return '';
+  };
+
   // Format date for display
   const formatDisplayDate = () => {
     if (reportType === "hourly") {
@@ -57,7 +78,12 @@ const OccupancyCharts = ({ item, reportType, chartData = [], dateRange = {} }) =
 
   // Prepare pie chart data
   const preparePieChartData = () => {
-    const occupancyPercentage = parseFloat(item.occupancyPercentage?.toString().replace('%', '') || item.occupancy_percentage?.toString().replace('%', '') || 0);
+    const occupancyPercentage = parseFloat(
+      (item.occupancyPercentage?.toString().replace('%', '')) ??
+      (item.occupancy_percentage_avg?.toString().replace('%', '')) ??
+      (item.occupancy_percentage?.toString().replace('%', '')) ??
+      0
+    );
     const availablePercentage = Math.max(0, 100 - occupancyPercentage);
     
     return [
@@ -76,11 +102,14 @@ const OccupancyCharts = ({ item, reportType, chartData = [], dateRange = {} }) =
     } else {
       // For weekly, monthly, custom reports - use raw data from item
       if (item.raw_data && Array.isArray(item.raw_data)) {
-        return item.raw_data.map(dataPoint => ({
-          date: dataPoint.date || new Date().toISOString().split('T')[0],
-          date_display: formatDateForChart(dataPoint.date),
-          occupancyPercentage: parseFloat(dataPoint.occupancyPercentage || 0)
-        }));
+        return item.raw_data.map(dataPoint => {
+          const dateIso = dataPoint.day ? normalizeDayToHktDate(dataPoint.day) : (dataPoint.date || new Date().toISOString().split('T')[0]);
+          return {
+            date: dateIso,
+            date_display: formatDateForChart(dateIso),
+            occupancyPercentage: parseFloat((dataPoint.occupancyPercentage ?? dataPoint.occupancy_percentage_avg ?? 0))
+          };
+        });
       }
       return [];
     }
