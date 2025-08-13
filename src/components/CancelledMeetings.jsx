@@ -164,7 +164,7 @@ const CancelledMeetings = () => {
       setIsLoading(true);
       setError(null);
       
-      const response = await fetch('http://optimus-india-njs-01.netbird.cloud:3005/pcs/optimus/canceled_meetings');
+      const response = await fetch('https://njs-01.optimuslab.space/pcs/optimus/canceled_meetings');
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }

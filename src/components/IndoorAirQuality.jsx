@@ -559,9 +559,9 @@ const fetchIAQData = useCallback(async () => {
     const endStr = formatDateLocal(endDate);
 
     if (reportType === "daily") {
-      url = `http://optimus-india-njs-01.netbird.cloud:3005/pcs/optimus/9in1_iaq_history/hour?start=${startStr}&end=${endStr}`;
+      url = `https://njs-01.optimuslab.space/pcs/optimus/9in1_iaq_history/hour?start=${startStr}&end=${endStr}`;
     } else {
-      url = `http://optimus-india-njs-01.netbird.cloud:3005/pcs/optimus/9in1_iaq_history/day?start=${startStr}&end=${endStr}`;
+      url = `https://njs-01.optimuslab.space/pcs/optimus/9in1_iaq_history/day?start=${startStr}&end=${endStr}`;
     }
 
     console.log('Fetching from URL:', url, 'Report Type:', reportType);
@@ -642,9 +642,9 @@ const refreshIAQDataSilently = useCallback(async () => {
 
     let url;
     if (reportType === "daily") {
-      url = `http://optimus-india-njs-01.netbird.cloud:3005/pcs/optimus/9in1_iaq_history/hour?start=${startStr}&end=${endStr}`;
+      url = `https://njs-01.optimuslab.space/pcs/optimus/9in1_iaq_history/hour?start=${startStr}&end=${endStr}`;
     } else {
-      url = `http://optimus-india-njs-01.netbird.cloud:3005/pcs/optimus/9in1_iaq_history/day?start=${startStr}&end=${endStr}`;
+      url = `https://njs-01.optimuslab.space/pcs/optimus/9in1_iaq_history/day?start=${startStr}&end=${endStr}`;
     }
 
     const response = await fetch(url);

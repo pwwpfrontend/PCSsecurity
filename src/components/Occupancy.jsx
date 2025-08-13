@@ -28,7 +28,7 @@ const HistoricalOccupancy = () => {
   const totalPages = Math.ceil(tableData.length / rowsPerPage);
 
   // API base URLs
-  const API_BASE_URL = "http://optimus-india-njs-01.netbird.cloud:3005/pcs/optimus";
+  const API_BASE_URL = "https://njs-01.optimuslab.space/pcs/optimus";
 
   // Enhanced logging function
   const logApiResponse = (endpoint, data) => {
@@ -128,7 +128,7 @@ const HistoricalOccupancy = () => {
           id: zone,
           zone: zone,
           occupancy: Math.round(avgOccupancy * 10) / 10,
-          occupancyPercentage: Math.round(avgPercentage),
+          occupancyPercentage: Math.round(avgPercentage * 100) / 100,
           reportLabel: getReportLabel(reportType),
           isAverage: true,
           date: new Date().toISOString().split('T')[0],
@@ -146,7 +146,7 @@ const HistoricalOccupancy = () => {
         id: 0,
         zone: selectedArea,
         occupancy: Math.round(avgOccupancy * 10) / 10,
-        occupancyPercentage: Math.round(avgPercentage),
+        occupancyPercentage: Math.round(avgPercentage * 100) / 100,
         reportLabel: getReportLabel(reportType),
         isAverage: true,
         date: new Date().toISOString().split('T')[0],
@@ -196,64 +196,144 @@ const HistoricalOccupancy = () => {
       
       // Group data by area and hour
       const areaHourMap = {};
-      
+
       dataArray.forEach((item) => {
         const areaName = item.area || item.zone || item.originalZone || "Unknown";
-        
-        // Convert UTC hour to HKT hour
+
+        // --- Robust UTC -> HKT parsing (handles ISO string or numeric hour) ---
         let hktHour = null;
+        let hktDateStr = null; // YYYY-MM-DD in HKT for the item (useful if you want correct date)
+        
         if (item.hour !== undefined && item.hour !== null) {
-          const utcHour = safeParseNumber(item.hour);
-          hktHour = (((utcHour + 8) % 24) + 24) % 24;
+          // If hour is a number (0-23)
+          if (typeof item.hour === 'number') {
+            const utcHour = item.hour;
+            hktHour = ((utcHour + 8) % 24 + 24) % 24;
+            // date not available from numeric hour; will keep using selected date later
+          } else if (typeof item.hour === 'string') {
+            // If it's an ISO timestamp like "2025-08-12T00:00:00.000000Z"
+            // parse it as a Date and extract UTC hour, then convert to HKT hour
+            const parsedMs = Date.parse(item.hour);
+            if (!Number.isNaN(parsedMs)) {
+              const utcDate = new Date(parsedMs);
+              const utcHour = utcDate.getUTCHours();
+              hktHour = ((utcHour + 8) % 24 + 24) % 24;
+
+              // compute HKT date string (YYYY-MM-DD)
+              const msHkt = parsedMs + 8 * 60 * 60 * 1000;
+              hktDateStr = new Date(msHkt).toISOString().split('T')[0];
+            } else {
+              // fallback: try to parse numeric-like hour safely
+              const maybeNum = safeParseNumber(item.hour);
+              if (!Number.isNaN(maybeNum) && maybeNum >= 0 && maybeNum <= 23) {
+                hktHour = ((maybeNum + 8) % 24 + 24) % 24;
+              }
+            }
+          }
         } else if (item.timestamp) {
+          // fallback: parse timestamp field (if present)
           const parsedTs = Date.parse(item.timestamp);
           if (!Number.isNaN(parsedTs)) {
             const msHkt = parsedTs + 8 * 60 * 60 * 1000;
             const d = new Date(msHkt);
             hktHour = d.getUTCHours();
+            hktDateStr = d.toISOString().split('T')[0];
           }
         }
-        
-        // Store data with converted hour
+
+        // Store data with converted hour (only if we resolved an hour)
         if (hktHour !== null) {
           const key = `${areaName}-${hktHour}`;
-          areaHourMap[key] = item;
+          // Also attach the derived hktDateStr on item so later code can use it
+          areaHourMap[key] = { ...item, __hktHour: hktHour, __hktDate: hktDateStr || null };
           console.log(`Mapped data for ${key}:`, {
-            occupancy: item.occupancy_count_avg || item.occupancy,
-            percentage: item.occupancy_percentage_avg || item.occupancyPercentage
+            occupancy: item.occupancy_count_avg ?? item.occupancy,
+            percentage: item.occupancy_percentage_avg ?? item.occupancyPercentage
           });
         }
       });
       
-      // Generate table rows for each area and each hour (8-17)
+      // Generate table rows for each area and each hour (8-17) — now dynamic per current HKT and available API data
+      const START_HOUR = 8;
+      const DEFAULT_END_HOUR = 17;
+
+      // Compute today's date in HKT and current HKT hour
+      const nowHktMs = Date.now() + 8 * 60 * 60 * 1000;
+      const nowHkt = new Date(nowHktMs);
+      const todayHktDateStr = nowHkt.toISOString().split('T')[0];
+      const currentHktHour = nowHkt.getUTCHours();
+
+      // Build a quick map of available hours per area from areaHourMap
+      const availableHoursByArea = {}; // { "Office": [8,9,10], "Zone A": [8,9] ... }
+      Object.keys(areaHourMap).forEach(key => {
+        // key format is `${areaName}-${hktHour}`
+        const parts = key.split('-');
+        const maybeHourStr = parts.pop();
+        const area = parts.join('-');
+        const hourNum = parseInt(maybeHourStr, 10);
+        if (!Number.isNaN(hourNum)) {
+          availableHoursByArea[area] = availableHoursByArea[area] || [];
+          availableHoursByArea[area].push(hourNum);
+        }
+      });
+
+      // For each area, compute endHour based on selected date and available API data
       areasToProcess.forEach(areaName => {
         console.log(`\nProcessing area: ${areaName}`);
-        
-        for (let hour = 8; hour <= 17; hour++) {
+
+        // Determine highest hour available from API for this area (or -Infinity if none)
+        const highestAvailable = (availableHoursByArea[areaName] && availableHoursByArea[areaName].length > 0)
+          ? Math.max(...availableHoursByArea[areaName])
+          : -Infinity;
+
+        // If the selected date is today (in HKT), show only up to currentHktHour,
+        // but if API has returned later hours, include those too.
+        // Otherwise (not today), show full range 8..17.
+        let endHour;
+        if (dateRange.selectedDate === todayHktDateStr) {
+          // Use the max of current HKT hour and highestAvailable, capped to DEFAULT_END_HOUR
+          // If both are -Infinity/undefined, endHour will become -Infinity and loop will skip.
+          endHour = Math.min(DEFAULT_END_HOUR, Math.max(currentHktHour, highestAvailable));
+        } else {
+          endHour = DEFAULT_END_HOUR;
+        }
+
+        // If endHour is less than START_HOUR, skip the loop (no rows for this area yet)
+        if (endHour < START_HOUR) {
+          console.log(`  Skipping area ${areaName}: computed endHour ${endHour} < start ${START_HOUR}`);
+          return;
+        }
+
+        // Loop from START_HOUR to computed endHour (inclusive)
+        for (let hour = START_HOUR; hour <= endHour; hour++) {
           const key = `${areaName}-${hour}`;
           const item = areaHourMap[key];
-          
+
           console.log(`  Hour ${hour}: ${item ? 'HAS DATA' : 'NO DATA'}`);
           if (item) {
-            console.log(`    Occupancy: ${item.occupancy_count_avg || item.occupancy}`);
-            console.log(`    Percentage: ${item.occupancy_percentage_avg || item.occupancyPercentage}`);
+            console.log(`    Occupancy: ${item.occupancy_count_avg ?? item.occupancy}`);
+            console.log(`    Percentage: ${item.occupancy_percentage_avg ?? item.occupancyPercentage}`);
           }
-          
-          // Get date from the item or use selected date
+
+          // Get date from the item (preferred) or use selected date
           let baseDate = dateRange.selectedDate;
-          if (item && item.day) {
-            const match = item.day.match(/^(\d{4})-(\d{2})-(\d{2})/);
-            if (match) {
-              const y = Number(match[1]);
-              const m = Number(match[2]);
-              const d = Number(match[3]);
-              const msUtc = Date.UTC(y, m - 1, d, 0, 0, 0);
-              const msHkt = msUtc + 8 * 60 * 60 * 1000;
-              baseDate = new Date(msHkt).toISOString().split('T')[0];
-            } else {
-              const parsed = Date.parse(item.day);
-              if (!Number.isNaN(parsed)) {
-                baseDate = new Date(parsed + 8 * 60 * 60 * 1000).toISOString().split('T')[0];
+          if (item) {
+            if (item.__hktDate) {
+              baseDate = item.__hktDate;
+            } else if (item.day) {
+              const match = item.day.match(/^(\d{4})-(\d{2})-(\d{2})/);
+              if (match) {
+                const y = Number(match[1]);
+                const m = Number(match[2]);
+                const d = Number(match[3]);
+                const msUtc = Date.UTC(y, m - 1, d, 0, 0, 0);
+                const msHkt = msUtc + 8 * 60 * 60 * 1000;
+                baseDate = new Date(msHkt).toISOString().split('T')[0];
+              } else {
+                const parsed = Date.parse(item.day);
+                if (!Number.isNaN(parsed)) {
+                  baseDate = new Date(parsed + 8 * 60 * 60 * 1000).toISOString().split('T')[0];
+                }
               }
             }
           }
@@ -265,7 +345,7 @@ const HistoricalOccupancy = () => {
             id: `${areaName}-${hour}`,
             zone: areaName,
             occupancy: Math.round(occupancyValue * 10) / 10,
-            occupancyPercentage: Math.round(percentageValue),
+            occupancyPercentage: Math.round(percentageValue * 100) / 100,
             hour: hour,
             date: baseDate,
             timestamp: item?.timestamp || Date.now(),
@@ -309,7 +389,7 @@ const HistoricalOccupancy = () => {
           id: index,
           zone: item.area || item.zone || item.originalZone || selectedArea,
           occupancy: Math.round(safeParseNumber(item.occupancy_count_avg ?? item.occupancy) * 10) / 10,
-          occupancyPercentage: Math.round(safeParseNumber(item.occupancy_percentage_avg ?? item.occupancyPercentage)),
+          occupancyPercentage: Math.round(safeParseNumber(item.occupancy_percentage_avg ?? item.occupancyPercentage) * 100) / 100,
           date: hktDate,
           timestamp: item.timestamp || Date.now(),
           raw_item: item
@@ -350,9 +430,27 @@ const HistoricalOccupancy = () => {
         if (Array.isArray(data)) {
           const filtered = data.filter(d => (d.area || d.zone) === (zone.split('-')[0] || zone));
           filtered.forEach(item => {
-            const hourUtc = safeParseNumber(item.hour);
-            const hourHkt = (((hourUtc + 8) % 24) + 24) % 24;
-            if (hourHkt >= 0 && hourHkt <= 23) {
+            // robust parse of ISO or numeric hour
+            let hourHkt = null;
+            if (item.hour !== undefined && item.hour !== null) {
+              if (typeof item.hour === 'number') {
+                hourHkt = ((item.hour + 8) % 24 + 24) % 24;
+              } else if (typeof item.hour === 'string') {
+                const parsedMs = Date.parse(item.hour);
+                if (!Number.isNaN(parsedMs)) {
+                  const utcDate = new Date(parsedMs);
+                  const utcHour = utcDate.getUTCHours();
+                  hourHkt = ((utcHour + 8) % 24 + 24) % 24;
+                } else {
+                  const maybeNum = safeParseNumber(item.hour);
+                  if (!Number.isNaN(maybeNum) && maybeNum >= 0 && maybeNum <= 23) {
+                    hourHkt = ((maybeNum + 8) % 24 + 24) % 24;
+                  }
+                }
+              }
+            }
+
+            if (hourHkt !== null && hourHkt >= 0 && hourHkt <= 23) {
               chartData[hourHkt].occupancyPercentage = safeParseNumber(item.occupancy_percentage_avg ?? item.occupancyPercentage);
             }
           });
@@ -643,7 +741,7 @@ const HistoricalOccupancy = () => {
                       onClick={() => toggleRowExpansion(`${item.zone}-${item.hour || 'noHour'}-${index}`)}
                     >
                       <td className="text-left px-4 py-4 font-medium text-gray-900">
-                        {item.isAverage ? `${item.zone} (${item.reportLabel})` : item.zone}
+                        {item.isAverage ? `${item.zone}` : item.zone}
                       </td>
                       {reportType === "daily" && (
                         <td className="text-center px-4 py-4 text-gray-700 font-medium">

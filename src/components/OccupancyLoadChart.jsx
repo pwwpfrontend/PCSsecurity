@@ -10,7 +10,7 @@ import {
 } from "recharts";
 import { Users } from "lucide-react";
 
-const OCCUPANCY_HISTORY_API_URL = "http://optimus-india-njs-01.netbird.cloud:3005/pcs/optimus/occupancy_history_g";
+const OCCUPANCY_HISTORY_API_URL = "https://njs-01.optimuslab.space/pcs/optimus/occupancy_history_g";
 
 // Function to format hour to display format (8am, 9am, 12pm, etc.)
 const formatHourToDisplay = (hour) => {
@@ -70,7 +70,7 @@ const OccupancyLoadChart = () => {
       // Map new API format to old API format
       const mappedData = data.map(item => ({
         hour: item.hour,
-        occupancy: item.r_occupancy_percentage_avg,
+        occupancy: item.occupancy_count_max,
         timestamp: item.timestamp_hour
       }));
       

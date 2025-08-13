@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Monitor } from "lucide-react";
 
-const ROOM_MEETINGS_API_URL = "http://optimus-india-njs-01.netbird.cloud:3005/pcs/optimus/meetings_live";
+const ROOM_MEETINGS_API_URL = "https://njs-01.optimuslab.space/pcs/optimus/meetings_live";
 
 // Define all meeting rooms
 const ALL_MEETING_ROOMS = [
