@@ -1,85 +1,239 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
-const Login = () => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+const PCSLogin = () => {
+  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [isSignUp, setIsSignUp] = useState(false);
   const navigate = useNavigate();
 
-  const handleLogin = () => {
-    console.log('Login clicked with:', { email, password });
-    navigate('/dashboard');
+  const handleLogin = async () => {
+    if (!email || !password) {
+      setError("Both email and password fields are required.");
+      return;
+    }
+  
+    try {
+      // First, get the access token
+      const tokenData = new URLSearchParams({
+        grant_type: "http://auth0.com/oauth/grant-type/password-realm",
+        username: email,
+        password: password,
+        audience: "https://pcs-optimus.us.auth0.com/api/v2/",
+        client_id: "S8SfvadMzRWIq7nHqiz6OSO7zEag3P8T",
+        realm: "Username-Password-Authentication",
+        scope: "openid profile email",
+      });
+  
+      const response = await fetch("https://pcs-optimus.us.auth0.com/oauth/token", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "Accept": "application/json",
+        },
+        body: tokenData,
+      });
+  
+      const data = await response.json();
+  
+      if (!response.ok) {
+        throw new Error(data.error_description || "Login failed");
+      }
+
+      // Get Management API token to fetch user details with metadata
+      const mgmtTokenResponse = await fetch("https://pcs-optimus.us.auth0.com/oauth/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          client_id: "c3BTFmDeFeJpAHrVjeZBkap1QjVS29EU",
+          client_secret: "aMQ5Y1RAHIGxaLkXKBD7kygiSSFOH_-CRaPT6VHbW9oKrKmb9nnMhcQ2VXPOY5CV",
+          audience: "https://pcs-optimus.us.auth0.com/api/v2/",
+          grant_type: "client_credentials",
+        }),
+      });
+
+      const mgmtTokenData = await mgmtTokenResponse.json();
+  
+      // Get basic user info first
+      const userResponse = await fetch("https://pcs-optimus.us.auth0.com/userinfo", {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${data.access_token}`,
+        },
+      });
+  
+      const userData = await userResponse.json();
+
+      // Get detailed user info with metadata using Management API
+      const userDetailResponse = await fetch(`https://pcs-optimus.us.auth0.com/api/v2/users/${encodeURIComponent(userData.sub)}`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${mgmtTokenData.access_token}`,
+        },
+      });
+
+      const userDetailData = await userDetailResponse.json();
+      
+      console.log("Full user data:", userDetailData); // Debug log
+  
+      // Extract username from metadata or fallback to email
+      const storedUsername = userDetailData.user_metadata?.username || 
+                            userDetailData.username || 
+                            userData.email.split("@")[0];
+  
+      // Store user details in localStorage
+      localStorage.setItem("user", JSON.stringify({
+        username: storedUsername,
+        email: userData.email,
+      }));
+      
+      localStorage.setItem("access_token", data.access_token);
+      
+      console.log("User info saved:", storedUsername, userData.email); 
+  
+      navigate("/dashboard");
+    } catch (error) {
+      setError(error.message || "Login failed. Please try again.");
+    }
+  };
+  
+  const handleSignUp = async () => {
+    if (!email || !password || !username) {
+      setError("All fields are required.");
+      return;
+    }
+
+    try {
+      const signUpData = {
+        client_id: "S8SfvadMzRWIq7nHqiz6OSO7zEag3P8T",
+        email: email,
+        password: password,
+        connection: "Username-Password-Authentication",
+        user_metadata: { username: username },
+      };
+
+      const response = await fetch("https://pcs-optimus.us.auth0.com/dbconnections/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(signUpData),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "User already exists. Please log in.");
+      }
+
+      console.log("Sign-Up successful! Username stored:", username);
+      
+      // Show success message and switch to login
+      setError("Sign-Up successful! Please log in.");
+      setIsSignUp(false);
+
+      // Reset form fields after successful signup
+      setEmail("");
+      setPassword("");
+      setUsername("");
+
+    } catch (error) {
+      setError(error.message || "Sign-up failed. Please try again.");
+    }
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-      
-      {/* Logo and Title */}
-      <div className="flex flex-col items-center mb-8">
-        <div className="flex items-center mb-4">
-          <div className="w-12 h-12 mr-4 flex items-center justify-center">
-            <img
-              src="logo.svg" 
-              alt="Optimus Logo"
-              className="w-full h-full object-contain"
+    <div className="flex flex-col justify-center items-center h-screen bg-gray-100">
+      {/* Logo */}
+      <img
+        src="/logo192.png"
+        alt="PCS Security Logo"
+        className="md:w-[240px] sm:w-[200px] w-[180px] h-auto mx-auto mb-14"
+      />
+  
+      {/* Login/Signup Box */}
+      <div className="border border-gray-300 shadow-md bg-white p-8 rounded-xl text-center md:w-[500px] sm:w-[490px] w-[340px]">
+        <p className="text-gray-700 text-lg font-semibold mb-6">
+          {isSignUp ? "Sign Up" : "Login"}
+        </p>
+  
+        {/* Error Message */}
+        {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
+  
+        {/* Username Field (Only in Sign-Up Mode) */}
+        {isSignUp && (
+          <div className="mb-4 text-left">
+            <label className="block mb-2 text-sm font-bold" htmlFor="username">
+              Username
+            </label>
+            <input
+              className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              id="username"
+              type="text"
+              placeholder="Enter your username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
             />
           </div>
-          <h1 className="text-3xl font-medium text-blue-600">PCS Security</h1>
+        )}
+  
+        {/* Email Field */}
+        <div className="mb-4 text-left">
+          <label className="block mb-2 text-sm font-bold" htmlFor="email">
+            Email Address
+          </label>
+          <input
+            className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            id="email"
+            type="email"
+            placeholder="name@address.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
         </div>
-      </div>
-
-      {/* Login Form */}
-      <div className="w-full max-w-md">
-        <div className="bg-white py-8 px-6 shadow-sm rounded-lg border border-gray-200">
-          <div className="mb-6">
-            <h2 className="text-2xl font-medium text-gray-900 text-center">Login</h2>
-          </div>
-
-          <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-                Email Address
-              </label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="name@address.com"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
-                Password
-              </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Enter your password"
-              />
-            </div>
-
-            <div>
-              <button
-                type="button"
-                onClick={handleLogin}
-                className="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
-              >
-                Login
-              </button>
-            </div>
-          </form>
+  
+        {/* Password Field */}
+        <div className="mb-6 text-left">
+          <label className="block mb-2 text-sm font-bold" htmlFor="password">
+            Password
+          </label>
+          <input
+            className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            id="password"
+            type="password"
+            placeholder="Enter your password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
         </div>
+  
+        {/* Login/Sign-Up Button */}
+        <button
+          className="bg-[#3a65d0] text-white font-bold py-2 w-full rounded-lg hover:bg-[#4774e5] transition duration-200"
+          onClick={isSignUp ? handleSignUp : handleLogin}
+        >
+          {isSignUp ? "Sign Up" : "Login"}
+        </button>
+  
+        {/* Toggle Between Login & Sign Up */}
+        {/* <p className="text-sm text-gray-600 mt-4">
+          {isSignUp ? "Already have an account? " : "Don't have an account? "}
+          <span
+            className="text-blue-500 underline cursor-pointer hover:underline"
+            onClick={() => {
+              setIsSignUp(!isSignUp);
+              setError("");
+              setEmail("");
+              setPassword("");
+              setUsername(""); 
+            }}
+          >
+            {isSignUp ? "Login" : "Sign Up"}
+          </span>
+        </p> */}
       </div>
     </div>
   );
 };
 
-export default Login;
+export default PCSLogin;

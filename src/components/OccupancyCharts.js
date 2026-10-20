@@ -31,19 +31,19 @@ const OccupancyCharts = ({ item, reportType, chartData = [], dateRange = {} }) =
     if (reportType === "hourly") {
       // For hourly, show current date
       const now = new Date();
-      return now.toLocaleDateString('en-GB', { 
-        day: '2-digit', 
-        month: '2-digit', 
-        year: 'numeric' 
+      return now.toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
       });
     } else if (reportType === "daily") {
       // For daily, show the selected date
       if (item.date) {
         const date = new Date(item.date);
-        return date.toLocaleDateString('en-GB', { 
-          day: '2-digit', 
-          month: '2-digit', 
-          year: 'numeric' 
+        return date.toLocaleDateString('en-GB', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric'
         });
       }
     } else {
@@ -53,39 +53,41 @@ const OccupancyCharts = ({ item, reportType, chartData = [], dateRange = {} }) =
         if (dates.length === 2) {
           const startDate = new Date(dates[0]);
           const endDate = new Date(dates[1]);
-          const formattedStart = startDate.toLocaleDateString('en-GB', { 
-            day: '2-digit', 
-            month: '2-digit', 
-            year: 'numeric' 
+          const formattedStart = startDate.toLocaleDateString('en-GB', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric'
           });
-          const formattedEnd = endDate.toLocaleDateString('en-GB', { 
-            day: '2-digit', 
-            month: '2-digit', 
-            year: 'numeric' 
+          const formattedEnd = endDate.toLocaleDateString('en-GB', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric'
           });
           return `${formattedStart} to ${formattedEnd}`;
         }
       }
     }
-    
+
     // Fallback to current date
-    return new Date().toLocaleDateString('en-GB', { 
-      day: '2-digit', 
-      month: '2-digit', 
-      year: 'numeric' 
+    return new Date().toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
     });
   };
 
   // Prepare pie chart data
   const preparePieChartData = () => {
+    // For daily reports, prioritize max values; for other reports use avg
     const occupancyPercentage = parseFloat(
       (item.occupancyPercentage?.toString().replace('%', '')) ??
+      (item.occupancy_percentage_max?.toString().replace('%', '')) ??
       (item.occupancy_percentage_avg?.toString().replace('%', '')) ??
       (item.occupancy_percentage?.toString().replace('%', '')) ??
       0
     );
     const availablePercentage = Math.max(0, 100 - occupancyPercentage);
-    
+
     return [
       { name: "Occupied", value: occupancyPercentage },
       { name: "Available", value: availablePercentage }
@@ -167,24 +169,24 @@ const OccupancyCharts = ({ item, reportType, chartData = [], dateRange = {} }) =
   // Format date range for display
   const formatDateRange = () => {
     if (!dateRange.startDate || !dateRange.endDate) return '';
-    
+
     const startDate = new Date(dateRange.startDate);
     const endDate = new Date(dateRange.endDate);
-    
+
     const formatDate = (date) => {
       const day = String(date.getDate()).padStart(2, '0');
       const month = String(date.getMonth() + 1).padStart(2, '0');
       const year = date.getFullYear();
       return `${day}/${month}/${year}`;
     };
-    
+
     return `${formatDate(startDate)} - ${formatDate(endDate)}`;
   };
 
   // Helper function to get header text based on report type
   const getHeaderText = () => {
     const zoneName = item.zone || 'Unknown';
-    
+
     if (reportType.toLowerCase() === "daily") {
       // For daily reports, show single date
       const dateText = item.date ? new Date(item.date).toLocaleDateString('en-GB') : 'Unknown Date';
@@ -220,7 +222,7 @@ const OccupancyCharts = ({ item, reportType, chartData = [], dateRange = {} }) =
       <h2 className="text-lg font-semibold mb-4">
         {getHeaderText()}
       </h2>
-      
+
       {/* Dynamic Layout Based on Report Type */}
       {reportType.toLowerCase() === "daily" ? (
         // Daily Report: Show only Pie Chart and Occupancy Details text
@@ -250,7 +252,7 @@ const OccupancyCharts = ({ item, reportType, chartData = [], dateRange = {} }) =
               </PieChart>
             </ResponsiveContainer>
           </div>
-          
+
           {/* Occupancy Details Text for Daily Only */}
           <div>
             <h3 className="text-lg font-medium mb-4">Occupancy Details</h3>
@@ -293,7 +295,7 @@ const OccupancyCharts = ({ item, reportType, chartData = [], dateRange = {} }) =
               </PieChart>
             </ResponsiveContainer>
           </div>
-          
+
           {/* Bar Chart for Weekly/Monthly/Custom */}
           <div>
             <h3 className="text-lg font-medium mb-4">{getChartTitle()}</h3>
@@ -301,7 +303,7 @@ const OccupancyCharts = ({ item, reportType, chartData = [], dateRange = {} }) =
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={prepareBarChartData()}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis 
+                  <XAxis
                     dataKey="date_display"
                     label={{ value: getXAxisLabel(), position: 'insideBottom', offset: 10 }}
                     tick={{ fontSize: 12 }}
@@ -309,17 +311,17 @@ const OccupancyCharts = ({ item, reportType, chartData = [], dateRange = {} }) =
                     textAnchor="middle"
                     height={60}
                   />
-                  <YAxis 
-                    label={{ value: 'Occupancy Percentage(%)', angle: -90, position: 'Middle',offset:10 }} 
+                  <YAxis
+                    label={{ value: 'Occupancy Percentage(%)', angle: -90, position: 'Middle', offset: 10 }}
                   />
                   <Tooltip formatter={formatTooltip} />
                   <Legend />
-                  <Bar 
-                    dataKey="occupancyPercentage" 
-                    name="Occupancy Percentage(%)" 
-                    radius={[4, 4, 0, 0]} 
-                    barSize={35} 
-                    fill="#2464EC" 
+                  <Bar
+                    dataKey="occupancyPercentage"
+                    name="Occupancy Percentage(%)"
+                    radius={[4, 4, 0, 0]}
+                    barSize={35}
+                    fill="#2464EC"
                   />
                 </BarChart>
               </ResponsiveContainer>

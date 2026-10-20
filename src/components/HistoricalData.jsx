@@ -27,7 +27,7 @@ const HistoricalData = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="flex items-center justify-between px-6 pt-6 mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">Historical Report</h1>
+        <h1 className="text-2xl font-semibold text-gray-800">Historical Report</h1>
         <p className="text-lg font-medium text-gray-600">
           {new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short" })},{" "}
           {new Date().toLocaleDateString("en-IN", { weekday: "long" })}

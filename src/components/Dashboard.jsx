@@ -1,16 +1,16 @@
 // File: src/pages/Dashboard.jsx  
 import React, { useEffect, useState } from "react";
-import {
-  MetricCard,
-  OccupancyChart,
-  OccupancyLoadChart,
-  MeetingRooms,
-} from "."; // ✅ fixed path
+import { MetricCard, MeetingRooms } from ".";
 
 const API_URL = "https://njs-01.optimuslab.space/pcs/optimus/9in1_iaq_live";
 
 const Dashboard = () => {
-  const [metrics, setMetrics] = useState([]);
+  // Start with placeholders so the layout doesn't jump while data loads
+  const [metrics, setMetrics] = useState([
+    { title: "Air Quality", value: null, unit: "%" },
+    { title: "Temperature", value: null, unit: "°C" },
+    { title: "Humidity", value: null, unit: "%" },
+  ]);
 
   // Function to fetch metrics from API
   const fetchMetrics = async () => {
@@ -38,30 +38,24 @@ const Dashboard = () => {
   }, []);
 
   return (
-    <div className="bg-gray-50">
-      <div className="flex items-center justify-between px-6 pt-6 mb-4">
-        <h1 className="text-xl font-semibold">Dashboard</h1>
+    <div className="bg-gray-50 min-h-full lg:h-full flex flex-col px-6 py-6 gap-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">Dashboard</h1>
         <p className="text-xl font-semibold">
           {new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short" })},{" "}
           {new Date().toLocaleDateString("en-IN", { weekday: "long" })}
         </p>
       </div>
 
-      {/* ✅ Metric Cards */}
-      <main className="px-6 pt-4 mb-4 grid gap-7 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
+      {/* IAQ, Temperature, Humidity — large cards that grow to fill the space */}
+      <section className="flex-1 min-h-[280px] max-h-[440px] grid gap-6 grid-cols-1 md:grid-cols-3">
         {metrics.map((metric) => (
           <MetricCard key={metric.title} {...metric} />
         ))}
-      </main>
-
-      {/* ✅ Charts - OccupancyChart now fetches data independently */}
-      <section className="px-6 py-4 grid gap-7 md:grid-cols-2">
-        <OccupancyChart />
-        <OccupancyLoadChart />
       </section>
 
-      {/* ✅ Meeting Rooms */}
-      <section className="px-6 py-4 mb-4">
+      {/* Meeting Rooms */}
+      <section>
         <MeetingRooms />
       </section>
     </div>

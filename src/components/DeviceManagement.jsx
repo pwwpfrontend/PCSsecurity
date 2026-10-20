@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronDown, ChevronRight, Circle, Search, Users, X } from 'lucide-react';
 
-// Custom Wind Icon for IAQ Sensors
+// Custom Wind Icon for IAQ Sensors - Updated with your provided SVG
 const WindIcon = ({ className }) => (
   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
     <path d="M12.8 19.6A2 2 0 1 0 14 16H2"/>
@@ -42,37 +42,34 @@ const DeviceManagement = () => {
 
   const fetchDevices = async () => {
     try {
-      const response = await fetch('https://api.powerworkplace.com/api:XrHHMxmV/devicemanagement?customerId=pcs');
+      // Updated to use your actual API endpoint
+      const response = await fetch('https://njs-01.optimuslab.space/pcs/optimus/device_management');
       const data = await response.json();
       
-      if (data && data.length > 0) {
-        const deviceData = data[0];
-        const deviceList = deviceData.devices.map(deviceId => {
-          const statusEntry = deviceData.devicesStatus.find(status => status[0] === deviceId);
-          const deviceInfo = deviceData.devicesInfo[deviceId];
+      if (data && Array.isArray(data) && data.length > 0) {
+        const deviceList = data.map(device => {
+          // Parse timestamp and check if device is active based on recent timestamp
+          const deviceTimestamp = new Date(device.timestamp);
+          const now = new Date();
+          const timeDifference = now - deviceTimestamp;
           
-          // Check if device is inactive based on timestamp (3+ days)
-          const isActive = statusEntry && statusEntry[1] && 
-            (Date.now() - statusEntry[1]) < (3 * 24 * 60 * 60 * 1000); // 3 days in milliseconds
-          
-          // Extract location info from deviceInfo array: [country, city, floor, area]
-          const country = deviceInfo ? deviceInfo[0] || 'Unknown' : 'Unknown';
-          const city = deviceInfo ? deviceInfo[1] || 'Unknown' : 'Unknown';
-          const floor = deviceInfo ? deviceInfo[2] || 'Unknown' : 'Unknown';
-          const area = deviceInfo ? deviceInfo[3] || 'Unknown' : 'Unknown';
+          // Consider device active if timestamp is within last 3 days (3 * 24 * 60 * 60 * 1000 ms = 259200000 ms)
+          // Device is inactive only if not updated for MORE than 3 days
+          const isActive = device.online === 1 && timeDifference <= (3 * 24 * 60 * 60 * 1000);
           
           return {
-            id: deviceId,
-            name: deviceId,
+            id: device.device,
+            name: device.device,
             status: isActive ? 'Active' : 'Inactive',
-            lastSeen: statusEntry && statusEntry[1] ? new Date(statusEntry[1]).toLocaleString() : 'Never',
-            country: country,
-            city: city,
-            floor: floor,
-            location: `${floor}, ${city}, ${country}`, // Display as "Floor, City, Country"
-            area: area,
-            sensorType: getSensorType(deviceId),
-            category: getDeviceCategory(deviceId)
+            lastSeen: deviceTimestamp.toLocaleString(),
+            country: 'Singapore', 
+            city: device.building || 'Tanjong Pagar',
+            floor: device.floor || 'Unknown',
+            location: `${device.floor || 'Unknown'}, ${device.building || 'Tanjong Pagar'}, Singapore`,
+            area: device.area || 'Unknown',
+            sensorType: getSensorType(device.device),
+            category: getDeviceCategory(device.device),
+            customer: device.customer
           };
         });
         
@@ -161,7 +158,7 @@ const DeviceManagement = () => {
   };
 
   const handleSaveChanges = () => {
-    // Update the device in the devices array
+   
     const updatedDevices = devices.map(device => {
       if (device.id === editingDevice.id) {
         return {
@@ -176,7 +173,7 @@ const DeviceManagement = () => {
     
     setDevices(updatedDevices);
     
-    // Here you would typically make an API call to save the changes
+    
     console.log('Saving changes for device:', editingDevice.id, editForm);
     
     handleCloseEdit();
@@ -192,7 +189,6 @@ const DeviceManagement = () => {
   const occupancyDevices = getCategoryDevices('occupancy');
   const iaqDevices = getCategoryDevices('iaq');
 
-  // Get categories that have devices after filtering
   const visibleCategories = [];
   if (occupancyDevices.length > 0) {
     visibleCategories.push({
@@ -229,10 +225,10 @@ const DeviceManagement = () => {
         onClick={() => toggleCategoryExpanded(category)}
       >
         <div className="flex items-center gap-4">
-          <Icon className="h-8 w-8 text-gray-700" />
+          <Icon className="h-6 w-6 text-gray-700" />
           <div>
-            <div className="font-medium text-gray-900 text-2xl">{title}</div>
-            <div className="text-xl text-gray-500">{devices.length} devices</div>
+            <div className="font-medium text-gray-900 text-xl">{title}</div>
+            <div className="text-lg text-gray-500">{devices.length} devices</div>
           </div>
         </div>
         <ChevronRight className={`h-6 w-6 text-gray-700 transition-transform ${expandedCategory === category ? 'rotate-90' : ''}`} />
@@ -252,8 +248,8 @@ const DeviceManagement = () => {
                   {getStatusIcon(device.status)}
                   
                   <div className="flex-1">
-                    <div className="font-medium text-gray-900 text-2xl">{device.name}</div>
-                    <div className="text-xl text-gray-500">{device.area}</div>
+                    <div className="font-normal text-gray-900 text-lg">{device.name}</div>
+                    <div className="text-sm text-gray-500">{device.area}</div>
                   </div>
                 </div>
                 
@@ -271,30 +267,30 @@ const DeviceManagement = () => {
                 <div className="px-6 pb-6 bg-gray-50 border-t border-gray-100">
                   <div className="grid grid-cols-2 gap-8 py-4">
                     <div>
-                      <div className="text-xl text-gray-600 mb-1">Sensor Type</div>
-                      <div className="font-medium text-gray-900 text-2xl">{device.sensorType}</div>
+                      <div className="text-lg text-gray-600 mb-1">Sensor Type</div>
+                      <div className="font-normal text-gray-900 text-lg">{device.sensorType}</div>
                     </div>
                     
                     <div>
-                      <div className="text-xl text-gray-600 mb-1">Status</div>
-                      <div className={`font-medium text-2xl ${getStatusColor(device.status)}`}>
+                      <div className="text-lg text-gray-600 mb-1">Status</div>
+                      <div className={`font-normal text-lg ${getStatusColor(device.status)}`}>
                         {device.status}
                       </div>
                     </div>
                     
                     <div>
-                      <div className="text-xl text-gray-600 mb-1">Location</div>
-                      <div className="font-medium text-gray-900 text-2xl">{device.location}</div>
+                      <div className="text-lg text-gray-600 mb-1">Location</div>
+                      <div className="font-normal text-gray-900 text-lg">{device.location}</div>
                     </div>
                     
                     <div>
-                      <div className="text-xl text-gray-600 mb-1">Area</div>
-                      <div className="font-medium text-gray-900 text-2xl">{device.area}</div>
+                      <div className="text-lg text-gray-600 mb-1">Area</div>
+                      <div className="font-normal text-gray-900 text-lg">{device.area}</div>
                     </div>
                     
                     <div>
-                      <div className="text-xl text-gray-600 mb-1">Last Updated</div>
-                      <div className="font-medium text-gray-900 text-2xl">{device.lastSeen}</div>
+                      <div className="text-lg text-gray-600 mb-1">Last Updated</div>
+                      <div className="font-normal text-gray-900 text-lg">{device.lastSeen}</div>
                     </div>
                   </div>
 
@@ -325,7 +321,7 @@ const DeviceManagement = () => {
    <div className="p-6 min-h-screen" style={{ backgroundColor: 'rgba(191, 191, 191, 0.2' }}>
       <div className="max-w-full mx-auto">
         {/* Header Outside */}
-        <h1 className="text-3xl font-bold text-gray-900 mb-6">Devices</h1>
+        <h1 className="text-3xl font-semibold text-gray-900 mb-6">Devices</h1>
         
         {/* Search Bar - No Background */}
         <div className="mb-4">

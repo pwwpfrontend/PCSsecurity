@@ -12,7 +12,7 @@ const HistoricalOccupancy = () => {
   const [expandedRow, setExpandedRow] = useState(null);
   const [chartDataMap, setChartDataMap] = useState({});
   const [apiError, setApiError] = useState(null);
-  
+
   // Initialize date range
   const today = new Date().toISOString().split("T")[0];
   const [dateRange, setDateRange] = useState({
@@ -93,7 +93,7 @@ const HistoricalOccupancy = () => {
       const url = apiType === 'daily'
         ? `${API_BASE_URL}/occupancy_hourly_summary?start=${startStr}&end=${endStr}`
         : `${API_BASE_URL}/occupancy_daily_summary?start=${startStr}&end=${endStr}`;
-      
+
       console.log('Fetching from URL:', url);
       const response = await fetch(url);
       if (!response.ok) return [];
@@ -109,7 +109,7 @@ const HistoricalOccupancy = () => {
   // Calculate averages for Weekly/Monthly/Custom reports
   const calculateAveragesForPeriod = (data, reportType) => {
     if (!data || data.length === 0) return [];
-    
+
     if (selectedArea === "All Areas") {
       // Group data by zone and calculate averages for each zone
       const zoneGroups = data.reduce((acc, item) => {
@@ -118,12 +118,12 @@ const HistoricalOccupancy = () => {
         acc[zone].push(item);
         return acc;
       }, {});
-      
+
       return Object.keys(zoneGroups).map(zone => {
         const zoneData = zoneGroups[zone];
         const avgOccupancy = zoneData.reduce((sum, item) => sum + safeParseNumber(item.occupancy_count_avg ?? item.occupancy), 0) / zoneData.length;
         const avgPercentage = zoneData.reduce((sum, item) => sum + safeParseNumber(item.occupancy_percentage_avg ?? item.occupancyPercentage), 0) / zoneData.length;
-        
+
         return {
           id: zone,
           zone: zone,
@@ -141,7 +141,7 @@ const HistoricalOccupancy = () => {
       const source = filtered.length > 0 ? filtered : data;
       const avgOccupancy = source.reduce((sum, item) => sum + safeParseNumber(item.occupancy_count_avg ?? item.occupancy), 0) / source.length;
       const avgPercentage = source.reduce((sum, item) => sum + safeParseNumber(item.occupancy_percentage_avg ?? item.occupancyPercentage), 0) / source.length;
-      
+
       return [{
         id: 0,
         zone: selectedArea,
@@ -169,21 +169,21 @@ const HistoricalOccupancy = () => {
   const processApiData = (data, type) => {
     console.log('Processing API data:', data, 'Type:', type);
     console.log('Selected Area:', selectedArea);
-    
+
     if (!data || data.length === 0) return [];
-    
+
     // Handle both single object and array responses
     const dataArray = Array.isArray(data) ? data : [data];
     console.log('Data array length:', dataArray.length);
-    
+
     let processedData = [];
-    
+
     // For daily reports, we need to group by area and show all hours for each area
     if (type === "daily") {
       // First, get all unique areas from the data
       const availableAreas = [...new Set(dataArray.map(item => item.area || item.zone || item.originalZone || "Unknown"))];
       console.log('Available areas in data:', availableAreas);
-      
+
       // Determine which areas to process
       let areasToProcess = [];
       if (selectedArea === "All Areas") {
@@ -193,7 +193,7 @@ const HistoricalOccupancy = () => {
         areasToProcess = availableAreas.includes(selectedArea) ? [selectedArea] : availableAreas;
       }
       console.log('Areas to process:', areasToProcess);
-      
+
       // Group data by area and hour
       const areaHourMap = {};
 
@@ -203,7 +203,7 @@ const HistoricalOccupancy = () => {
         // --- Robust UTC -> HKT parsing (handles ISO string or numeric hour) ---
         let hktHour = null;
         let hktDateStr = null; // YYYY-MM-DD in HKT for the item (useful if you want correct date)
-        
+
         if (item.hour !== undefined && item.hour !== null) {
           // If hour is a number (0-23)
           if (typeof item.hour === 'number') {
@@ -247,12 +247,14 @@ const HistoricalOccupancy = () => {
           // Also attach the derived hktDateStr on item so later code can use it
           areaHourMap[key] = { ...item, __hktHour: hktHour, __hktDate: hktDateStr || null };
           console.log(`Mapped data for ${key}:`, {
-            occupancy: item.occupancy_count_avg ?? item.occupancy,
-            percentage: item.occupancy_percentage_avg ?? item.occupancyPercentage
+            occupancy_avg: item.occupancy_count_avg ?? item.occupancy,
+            occupancy_max: item.occupancy_count_max,
+            percentage_avg: item.occupancy_percentage_avg ?? item.occupancyPercentage,
+            percentage_max: item.occupancy_percentage_max
           });
         }
       });
-      
+
       // Generate table rows for each area and each hour (8-17) — now dynamic per current HKT and available API data
       const START_HOUR = 8;
       const DEFAULT_END_HOUR = 17;
@@ -311,8 +313,8 @@ const HistoricalOccupancy = () => {
 
           console.log(`  Hour ${hour}: ${item ? 'HAS DATA' : 'NO DATA'}`);
           if (item) {
-            console.log(`    Occupancy: ${item.occupancy_count_avg ?? item.occupancy}`);
-            console.log(`    Percentage: ${item.occupancy_percentage_avg ?? item.occupancyPercentage}`);
+            console.log(`    Occupancy (using MAX): ${item.occupancy_count_max ?? item.occupancy_count_avg}`);
+            console.log(`    Percentage (using MAX): ${item.occupancy_percentage_max ?? item.occupancy_percentage_avg}`);
           }
 
           // Get date from the item (preferred) or use selected date
@@ -338,8 +340,9 @@ const HistoricalOccupancy = () => {
             }
           }
 
-          const occupancyValue = item ? safeParseNumber(item.occupancy_count_avg ?? item.occupancy) : 0;
-          const percentageValue = item ? safeParseNumber(item.occupancy_percentage_avg ?? item.occupancyPercentage) : 0;
+          // For daily reports, use MAX values instead of AVG values
+          const occupancyValue = item ? safeParseNumber(item.occupancy_count_max ?? item.occupancy_count_avg ?? item.occupancy) : 0;
+          const percentageValue = item ? safeParseNumber(item.occupancy_percentage_max ?? item.occupancy_percentage_avg ?? item.occupancyPercentage) : 0;
 
           processedData.push({
             id: `${areaName}-${hour}`,
@@ -353,7 +356,7 @@ const HistoricalOccupancy = () => {
           });
         }
       });
-      
+
       // Sort by area name first, then by hour
       processedData = processedData.sort((a, b) => {
         if (a.zone !== b.zone) {
@@ -361,10 +364,10 @@ const HistoricalOccupancy = () => {
         }
         return a.hour - b.hour;
       });
-      
+
       console.log('Final processed data length:', processedData.length);
       console.log('Sample processed items:', processedData.slice(0, 3));
-      
+
     } else {
       // For non-daily reports, process normally
       processedData = dataArray.map((item, index) => {
@@ -396,7 +399,7 @@ const HistoricalOccupancy = () => {
         };
       });
     }
-    
+
     return processedData;
   };
 
@@ -406,26 +409,26 @@ const HistoricalOccupancy = () => {
       let url, data;
       const startTimestamp = new Date(dateRange.selectedDate || dateRange.startDate).getTime();
       const endTimestamp = new Date(dateRange.selectedDate || dateRange.endDate).getTime() + (24 * 60 * 60 * 1000) - 1;
-      
+
       if (reportType.toLowerCase() === "daily") {
         // For daily reports, use the historical API to get hourly data (0-23)
         const startStr = new Date(startTimestamp).toISOString().split('T')[0];
         const endStr = new Date(endTimestamp).toISOString().split('T')[0];
         url = `${API_BASE_URL}/occupancy_hourly_summary?start=${startStr}&end=${endStr}`;
-        
+
         const response = await fetch(url);
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         data = await response.json();
-        
+
         console.log('Chart data received:', data);
-        
+
         // Process data to create chart data for all 24 hours
         const chartData = Array(24).fill().map((_, index) => ({
           hour: index,
           hour_display: `${String(index).padStart(2, '0')}:00`,
           occupancyPercentage: 0
         }));
-        
+
         // Fill in actual data
         if (Array.isArray(data)) {
           const filtered = data.filter(d => (d.area || d.zone) === (zone.split('-')[0] || zone));
@@ -451,17 +454,19 @@ const HistoricalOccupancy = () => {
             }
 
             if (hourHkt !== null && hourHkt >= 0 && hourHkt <= 23) {
-              chartData[hourHkt].occupancyPercentage = safeParseNumber(item.occupancy_percentage_avg ?? item.occupancyPercentage);
+              // For daily reports, use MAX values instead of AVG values
+              chartData[hourHkt].occupancyPercentage = safeParseNumber(item.occupancy_percentage_max ?? item.occupancy_percentage_avg ?? item.occupancyPercentage);
             }
           });
         } else if (data && data.hour !== undefined) {
           const hourUtc = safeParseNumber(data.hour);
           const hourHkt = (((hourUtc + 8) % 24) + 24) % 24;
           if (hourHkt >= 0 && hourHkt <= 23) {
-            chartData[hourHkt].occupancyPercentage = safeParseNumber(data.occupancy_percentage_avg ?? data.occupancyPercentage);
+            // For daily reports, use MAX values instead of AVG values
+            chartData[hourHkt].occupancyPercentage = safeParseNumber(data.occupancy_percentage_max ?? data.occupancy_percentage_avg ?? data.occupancyPercentage);
           }
         }
-        
+
         setChartDataMap(prev => ({
           ...prev,
           [zone]: chartData
@@ -471,11 +476,11 @@ const HistoricalOccupancy = () => {
         const startStr = new Date(startTimestamp).toISOString().split('T')[0];
         const endStr = new Date(endTimestamp).toISOString().split('T')[0];
         url = `${API_BASE_URL}/occupancy_daily_summary?start=${startStr}&end=${endStr}`;
-        
+
         const response = await fetch(url);
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         data = await response.json();
-        
+
         // Process data for date-based charts
         const dataArray = Array.isArray(data) ? data : [data];
         const filtered = dataArray.filter(d => (selectedArea === 'All Areas') ? true : ((d.area || d.zone) === zone.split('-')[0] || (d.area || d.zone) === selectedArea));
@@ -504,7 +509,7 @@ const HistoricalOccupancy = () => {
             occupancyPercentage: safeParseNumber(item.occupancy_percentage_avg ?? item.occupancyPercentage)
           };
         });
-        
+
         setChartDataMap(prev => ({
           ...prev,
           [zone]: chartData
@@ -527,20 +532,20 @@ const HistoricalOccupancy = () => {
       const startStr = start.toISOString().split('T')[0];
       const testUrl = `${API_BASE_URL}/occupancy_daily_summary?start=${startStr}&end=${endStr}`;
       console.log("Test URL:", testUrl);
-      
+
       const response = await fetch(testUrl);
       console.log("Response status:", response.status);
       console.log("Response headers:", [...response.headers.entries()]);
-      
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
+
       const data = await response.json();
       console.log("Test API response:", data);
       console.log("Response type:", typeof data);
       console.log("Is array:", Array.isArray(data));
-      
+
       if (Array.isArray(data) && data.length > 0) {
         console.log("Sample item from API:", data[0]);
         console.log("Available fields:", Object.keys(data[0]));
@@ -548,7 +553,7 @@ const HistoricalOccupancy = () => {
         console.log("Sample data:", data);
         console.log("Available fields:", Object.keys(data));
       }
-      
+
       return data;
     } catch (error) {
       console.error("API test failed:", error);
@@ -563,30 +568,30 @@ const HistoricalOccupancy = () => {
     console.log(`\n=== Starting ${reportType} data fetch ===`);
     console.log("Date range:", dateRange);
     console.log("Selected area:", selectedArea);
-    
+
     try {
       let data;
-      
+
       if (reportType.toLowerCase() === "daily") {
         console.log("Fetching daily data using hourly API...");
         // For Daily reports, use hourly API data
         const startStr = dateRange.selectedDate;
         const endStr = dateRange.selectedDate;
-        
+
         // Fetch data (all areas) - DO NOT filter here
         data = await fetchAllZonesData(startStr, endStr, "daily");
         logApiResponse("occupancy_hourly_summary", data);
-        
+
         // Process the data - filtering will happen inside processApiData
         const processedData = processApiData(data, "daily");
         setTableData(processedData);
-        
+
       } else {
         console.log(`Fetching ${reportType} report data...`);
         // For Weekly, Monthly, Custom reports, use regular API
         const startStr = dateRange.startDate;
         const endStr = dateRange.endDate;
-        
+
         // Fetch data (all areas)
         data = await fetchAllZonesData(startStr, endStr, "period");
         // Apply area filter on client
@@ -596,7 +601,7 @@ const HistoricalOccupancy = () => {
         const averageData = calculateAveragesForPeriod(filtered, reportType);
         setTableData(averageData);
       }
-      
+
     } catch (error) {
       console.error("Error fetching data:", error);
       console.error("Error details:", {
@@ -618,20 +623,20 @@ const HistoricalOccupancy = () => {
       dateRange,
       selectedArea
     });
-    
+
     // Validate date range before fetching
     if (reportType === "daily" && !dateRange.selectedDate) {
       console.error("No selected date for daily report");
       setApiError("No selected date for daily report");
       return;
     }
-    
+
     if ((reportType === "weekly" || reportType === "monthly" || reportType === "custom") && (!dateRange.startDate || !dateRange.endDate)) {
       console.error(`Missing start or end date for ${reportType} report`);
       setApiError(`Missing start or end date for ${reportType} report`);
       return;
     }
-    
+
     fetchData();
     setExpandedRow(null);
     setChartDataMap({});
@@ -719,7 +724,7 @@ const HistoricalOccupancy = () => {
                     </th>
                   )}
                   <th className="text-center px-4 py-4 font-semibold text-gray-700 w-1/5">
-                    Average Occupancy
+                    Occupancy
                   </th>
                   <th className="text-center px-4 py-4 font-semibold text-gray-700 w-1/5">
                     Occupancy Percentage
@@ -733,11 +738,10 @@ const HistoricalOccupancy = () => {
                 {currentRows.map((item, index) => (
                   <React.Fragment key={`${item.zone}-${item.hour || 'noHour'}-${index}`}>
                     <tr
-                      className={`cursor-pointer hover:bg-gray-50 transition-colors ${
-                        index === currentRows.length - 1 && expandedRow !== `${item.zone}-${item.hour || 'noHour'}-${index}`
-                          ? ""
-                          : "border-b border-gray-200"
-                      }`}
+                      className={`cursor-pointer hover:bg-gray-50 transition-colors ${index === currentRows.length - 1 && expandedRow !== `${item.zone}-${item.hour || 'noHour'}-${index}`
+                        ? ""
+                        : "border-b border-gray-200"
+                        }`}
                       onClick={() => toggleRowExpansion(`${item.zone}-${item.hour || 'noHour'}-${index}`)}
                     >
                       <td className="text-left px-4 py-4 font-medium text-gray-900">
@@ -752,7 +756,7 @@ const HistoricalOccupancy = () => {
                         {item.occupancy !== undefined && item.occupancy !== null ? item.occupancy : 0}
                       </td>
                       <td className="text-center px-4 py-4 text-gray-700 font-medium">
-                        {item.occupancyPercentage !== undefined && item.occupancyPercentage !== null ? 
+                        {item.occupancyPercentage !== undefined && item.occupancyPercentage !== null ?
                           `${item.occupancyPercentage}%` : '0%'}
                       </td>
                       <td className="text-center px-4 py-4">
@@ -828,16 +832,15 @@ const HistoricalOccupancy = () => {
                 } else {
                   pageNum = currentPage - 2 + idx;
                 }
-                
+
                 return (
                   <button
                     key={pageNum}
                     onClick={() => setCurrentPage(pageNum)}
-                    className={`w-8 h-8 flex items-center justify-center rounded-md border text-sm ${
-                      currentPage === pageNum
-                        ? "bg-blue-600 text-white border-blue-600"
-                        : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
-                    }`}
+                    className={`w-8 h-8 flex items-center justify-center rounded-md border text-sm ${currentPage === pageNum
+                      ? "bg-blue-600 text-white border-blue-600"
+                      : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+                      }`}
                   >
                     {pageNum}
                   </button>

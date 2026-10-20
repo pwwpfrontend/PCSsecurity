@@ -1,3 +1,13 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+
+.custom-shadow {
+    box-shadow: 0 1px 2px rgba(68, 67, 67, 0.1), 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+  .custom-s {
+    box-shadow: -2px -3px 10.3px rgba(136, 136, 136, 0.13), 3px 4px 9.1px rgba(136, 136, 136, 0.13);
+  
+  }
+  
